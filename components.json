@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "default",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "packages/ui/src/styles/theme.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "aliases": {
+    "components": "@sage/ui/components",
+    "utils": "@sage/ui/lib/utils",
+    "ui": "@sage/ui/components/ui",
+    "lib": "@sage/ui/lib"
+  }
+}
