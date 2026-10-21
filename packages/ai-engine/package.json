@@ -8,9 +8,5 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test src/*.test.ts"
-  },
-  "devDependencies": {
-    "@types/node": "^22.13.0",
-    "typescript": "^6.0.3"
   }
 }
