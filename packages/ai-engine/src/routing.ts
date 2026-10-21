@@ -64,7 +64,7 @@ export class GoogleRoutesProvider implements RoutingProvider {
     let data: unknown;
     try { data = await response.json(); } catch { throw new RoutingError("Invalid Google Routes JSON"); }
     const route = (data as { routes?: { distanceMeters?: number; duration?: string }[] } | null)?.routes?.[0];
-    const seconds = route?.duration && /^\\d+(?:\\.\\d+)?s$/.test(route.duration)
+    const seconds = route?.duration && /^\d+(?:\.\d+)?s$/.test(route.duration)
       ? Number(route.duration.slice(0, -1)) : NaN;
     if (!route || !Number.isFinite(route.distanceMeters) || route.distanceMeters! < 0 ||
       !Number.isFinite(seconds) || seconds < 0) throw new RoutingError("Google Routes response missing valid route metrics");
