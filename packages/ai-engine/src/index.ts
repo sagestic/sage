@@ -5,3 +5,5 @@ export * from "./recovery.ts";
 export * from "./routing.ts";
 export * from "./incident.ts";
 export * from "./ai-orchestration.ts";
+export * from "./gemini.ts";
+export * from "./road-optimizer.ts";
