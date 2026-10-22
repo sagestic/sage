@@ -1,5 +1,6 @@
 import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
+import nextConfig from "eslint-config-next";
 
 export default defineConfig([
   {
@@ -12,6 +13,7 @@ export default defineConfig([
       "**/node_modules/**",
     ],
   },
+  ...nextConfig,
   {
     files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
     extends: [tseslint.configs.recommended],
