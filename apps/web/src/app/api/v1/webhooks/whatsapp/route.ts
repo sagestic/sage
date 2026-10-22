@@ -75,41 +75,86 @@ export async function POST(req: NextRequest) {
 
             receivedCount++;
 
-            // Extract sender and message text / location
+            // Extract sender and unstructured message body
             const senderPhone = msg.from;
-            const messageText = msg.text?.body || (msg.location ? "GPS Pin Shared via WhatsApp" : "");
-            const hasLocation = Boolean(msg.location);
-            const dropoffCoords = hasLocation
-              ? {
-                  latitude: msg.location.latitude,
-                  longitude: msg.location.longitude,
-                }
-              : undefined;
+            const rawText = msg.text?.body || "";
 
-            // Log event to active default tenant
+            // Robust NLP/Regex Extraction for Unstructured WhatsApp Orders
+            const phoneMatch =
+              rawText.match(/(?:\+234|0)[789][01]\d{8}/) ||
+              rawText.match(/\b\d{10,14}\b/);
+            const recipientPhone = phoneMatch ? phoneMatch[0] : senderPhone;
+
+            const nameMatch = rawText.match(
+              /(?:Recipient|Customer|Name|Contact|Send to|Drop for)[:\s]+([A-Za-z\s]+?)(?:,|\.|\n|$)/i,
+            );
+            const recipientName = nameMatch
+              ? nameMatch[1].trim()
+              : `WhatsApp Customer (${senderPhone.slice(-4)})`;
+
+            // Extract Pickup
+            const pickupMatch = rawText.match(
+              /(?:pick\s*up\s*(?:at|from)?|from)[:\s]+([^,\n]+)/i,
+            );
+            const pickupAddress = pickupMatch
+              ? pickupMatch[1].trim()
+              : "Main Dispatch Depot";
+
+            // Extract Dropoff Destination (Landmarks / Unstructured address)
+            const dropoffMatch = rawText.match(
+              /(?:deliver\s*to|drop\s*at|send\s*to|to)[:\s]+([^,\n]+)/i,
+            );
+            const dropoffAddress = dropoffMatch
+              ? dropoffMatch[1].trim()
+              : rawText.length > 10
+                ? rawText.slice(0, 120)
+                : "Address Pending Clarification";
+
+            // Evaluate address sufficiency (does it contain street / landmark cues?)
+            const landmarkKeywords = [
+              "street", "road", "way", "close", "ave", "lane", "crescent",
+              "plaza", "junction", "roundabout", "behind", "opposite", "beside",
+              "estate", "phase", "phase 1", "phase 2", "building", "gate",
+            ];
+            const hasLandmarkCue = landmarkKeywords.some((word) =>
+              dropoffAddress.toLowerCase().includes(word),
+            );
+
+            const isConfirmed = hasLandmarkCue || dropoffAddress.length > 15;
+
+            // Ingest canonical order into Sage
             sageRepo.ingestCanonicalOrder("org_apex_logistics", {
               source: "WHATSAPP",
               externalOrderId: messageId,
-              recipientName: `WhatsApp Contact (${senderPhone.slice(-4)})`,
-              recipientPhone: senderPhone,
-              pickupAddress: "Main Hub Depot",
-              dropoffAddress: hasLocation
-                ? `GPS Coordinates (${msg.location.latitude.toFixed(4)}, ${msg.location.longitude.toFixed(4)})`
-                : messageText.slice(0, 100) || "Address pending clarification",
-              dropoffCoordinates: dropoffCoords,
-              priority: "STANDARD",
+              recipientName,
+              recipientPhone,
+              pickupAddress,
+              dropoffAddress,
+              priority:
+                rawText.toLowerCase().includes("urgent") ||
+                rawText.toLowerCase().includes("rush")
+                  ? "RUSH"
+                  : "STANDARD",
               packageSize: "MEDIUM",
-              notes: `Ingested from WhatsApp: "${messageText}"`,
+              notes: `WhatsApp Booking: "${rawText.slice(0, 160)}"`,
               metadata: {
                 whatsappMessageId: messageId,
                 rawSender: senderPhone,
-                status: hasLocation ? "CONFIRMED" : "CANDIDATE_REQUIRES_CLARIFICATION",
+                status: isConfirmed
+                  ? "CONFIRMED"
+                  : "CANDIDATE_REQUIRES_CLARIFICATION",
                 customerTrackingUrl: `/track/${messageId}`,
+                requiresGeocoding: true,
+                autoResponseSuggested: isConfirmed
+                  ? `Booking confirmed! We are matching a courier. Track live: https://sage-ops.com/track/${messageId}`
+                  : "We received your delivery request! Please provide the street name or closest landmark for delivery.",
               },
             });
 
-            // If auto-dispatch is enabled, try matching immediately
-            sageRepo.autoDispatchPendingOrders("org_apex_logistics");
+            // If confirmed, trigger autonomous dispatch immediately
+            if (isConfirmed) {
+              sageRepo.autoDispatchPendingOrders("org_apex_logistics");
+            }
           }
         }
       }

@@ -1,5 +1,5 @@
-import { distanceKm } from "./geo.ts";
-import type { Location } from "./types.ts";
+import { distanceKm } from "./geo";
+import type { Location } from "./types";
 
 export type TravelEstimate = {
   distanceKm: number;

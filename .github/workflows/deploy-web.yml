@@ -1,0 +1,36 @@
+name: Deploy Web
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "apps/web/**"
+      - "packages/ai-engine/**"
+      - "packages/db/**"
+      - "packages/site-schema/**"
+      - "packages/ui/**"
+      - "packages/utils/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "tsconfig.base.json"
+      - ".dockerignore"
+      - ".github/workflows/deploy-app.yml"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: "web-deploy-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/deploy-app.yml
+    with:
+      app: web
+      webhook_secret: COOLIFY_WEBHOOK_WEB
+    secrets: inherit

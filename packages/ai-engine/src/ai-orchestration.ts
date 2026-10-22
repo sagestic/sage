@@ -1,7 +1,7 @@
-import { planRecovery, validatePlan } from "./recovery.ts";
-import type { RecoveryRequest, RecoveryResult } from "./types.ts";
-import type { IncidentInterpreter, IncidentInterpretation } from "./incident.ts";
-import type { RoutingProvider, TravelEstimate } from "./routing.ts";
+import { planRecovery, validatePlan } from "./recovery";
+import type { RecoveryRequest, RecoveryResult } from "./types";
+import type { IncidentInterpreter, IncidentInterpretation } from "./incident";
+import type { RoutingProvider, TravelEstimate } from "./routing";
 
 /**
  * Read-only integration boundary. Routing estimates are advisory until the

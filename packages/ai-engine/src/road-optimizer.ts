@@ -1,6 +1,6 @@
-import type { Delivery, Location, RecoveryRequest, Route, RecoveryOption } from "./types.ts";
-import { validateRequest } from "./validation.ts";
-import type { RoutingProvider, TravelEstimate } from "./routing.ts";
+import type { Delivery, Location, RecoveryRequest, Route, RecoveryOption } from "./types";
+import { validateRequest } from "./validation";
+import type { RoutingProvider, TravelEstimate } from "./routing";
 
 export interface RoadOptimizationConfig {
   maxDeliveries?: number;

@@ -1,5 +1,5 @@
-import { StructuredIncidentInterpreter } from "./incident.ts";
-import type { IncidentInterpreter } from "./incident.ts";
+import { StructuredIncidentInterpreter } from "./incident";
+import type { IncidentInterpreter } from "./incident";
 
 export interface GeminiConfig {
   apiKey: string;

@@ -1,6 +1,6 @@
-import { distanceKm } from "./geo.ts";
-import { validateRequest } from "./validation.ts";
-import type { Delivery, RecoveryOption, RecoveryRequest, RecoveryResult, Route, Vehicle } from "./types.ts";
+import { distanceKm } from "./geo";
+import { validateRequest } from "./validation";
+import type { Delivery, RecoveryOption, RecoveryRequest, RecoveryResult, Route, Vehicle } from "./types";
 
 const MAX_DELIVERIES = 8;
 const MAX_EVALUATIONS = 200_000;

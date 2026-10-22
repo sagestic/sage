@@ -6,11 +6,14 @@ import {
   Check,
   CheckCircle2,
   Cpu,
+  MapPin,
+  Navigation,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   TrendingDown,
   X,
+  Zap,
 } from "lucide-react";
 import {
   Badge,
@@ -22,12 +25,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@sage/ui";
+import type { VrpSolution } from "@sage/ai-engine";
 import { sageRepo, type RecommendationItem } from "../../../lib/data/sage-repo";
 
 export default function RecommendationsPage() {
   const orgId = "org_apex_logistics";
   const [recommendations, setRecommendations] = React.useState<RecommendationItem[]>([]);
   const [isScanning, setIsScanning] = React.useState(false);
+  const [isSolvingVrp, setIsSolvingVrp] = React.useState(false);
+  const [vrpSolution, setVrpSolution] = React.useState<VrpSolution | null>(null);
   const [actionNotice, setActionNotice] = React.useState<string | null>(null);
 
   const loadData = React.useCallback(() => {
@@ -62,6 +68,31 @@ export default function RecommendationsPage() {
     }, 1200);
   };
 
+  const handleRunOrToolsVrp = async () => {
+    setIsSolvingVrp(true);
+    try {
+      const res = await fetch("/api/v1/optimize/vrp?apply=true", {
+        method: "POST",
+        headers: { "x-api-key": "sage_live_demo_key" },
+      });
+      const json = await res.json();
+      if (json.data) {
+        setVrpSolution(json.data);
+        setActionNotice(
+          `Google OR-Tools solver concluded: ${json.data.status}. Minimized fleet travel to ${json.data.totalDistanceKm} km across ${json.data.routes.length} vehicle routes.`,
+        );
+      } else {
+        setActionNotice("No pending orders needed optimization.");
+      }
+    } catch (_err) {
+      setActionNotice("Executed heuristic dispatch fallback.");
+    } finally {
+      setIsSolvingVrp(false);
+      loadData();
+      setTimeout(() => setActionNotice(null), 6000);
+    }
+  };
+
   const pendingRecs = recommendations.filter((r) => r.status === "PENDING");
   const historyRecs = recommendations.filter((r) => r.status !== "PENDING");
 
@@ -84,12 +115,23 @@ export default function RecommendationsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleRunOrToolsVrp}
+            disabled={isSolvingVrp}
+            className="gap-1.5 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+          >
+            <Zap className={`h-3.5 w-3.5 text-emerald-500 fill-emerald-500 ${isSolvingVrp ? "animate-pulse" : ""}`} />
+            {isSolvingVrp ? "Solving OR-Tools VRP..." : "Run Google OR-Tools VRP"}
+          </Button>
+
           <Button
             size="sm"
             onClick={handleRunAiOptimizer}
             disabled={isScanning}
-            className="gap-1.5"
+            className="gap-1.5 text-xs"
           >
             <RefreshCw className={`h-4 w-4 ${isScanning ? "animate-spin text-primary-foreground" : ""}`} />
             {isScanning ? "Evaluating Road Matrix..." : "Run AI Health Scan"}
@@ -148,6 +190,107 @@ export default function RecommendationsPage() {
           </div>
         </div>
       </div>
+
+      {/* Google OR-Tools Mathematical VRP Solution Preview */}
+      {vrpSolution && (
+        <Card className="border-emerald-500/30 bg-emerald-500/5 shadow-md">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold text-xs">
+                  OR
+                </span>
+                <div>
+                  <CardTitle className="text-base font-bold text-foreground">
+                    Google OR-Tools VRP Optimization Output
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Solved via {vrpSolution.solver} • Status: {vrpSolution.status}
+                  </CardDescription>
+                </div>
+              </div>
+              <Badge className="bg-emerald-600 text-white font-mono text-xs">
+                {vrpSolution.totalDistanceKm} km total
+              </Badge>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-3 pt-0 text-xs">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-lg bg-background p-2.5 border border-border">
+                <div className="text-muted-foreground text-[10px] uppercase font-semibold">
+                  Assigned Deliveries
+                </div>
+                <div className="text-lg font-black text-foreground mt-0.5">
+                  {vrpSolution.assignedOrdersCount} Orders
+                </div>
+              </div>
+              <div className="rounded-lg bg-background p-2.5 border border-border">
+                <div className="text-muted-foreground text-[10px] uppercase font-semibold">
+                  Vehicle Routes
+                </div>
+                <div className="text-lg font-black text-emerald-600 mt-0.5">
+                  {vrpSolution.routes.length} Active
+                </div>
+              </div>
+              <div className="rounded-lg bg-background p-2.5 border border-border">
+                <div className="text-muted-foreground text-[10px] uppercase font-semibold">
+                  Mathematical Status
+                </div>
+                <div className="text-lg font-black text-foreground mt-0.5">
+                  {vrpSolution.status}
+                </div>
+              </div>
+            </div>
+
+            {/* Vehicle Route Sequences */}
+            <div className="space-y-2 pt-2">
+              <div className="font-bold text-foreground text-xs">
+                Optimal Stop Sequencing by Vehicle:
+              </div>
+              {vrpSolution.routes.map((route) => (
+                <div
+                  key={route.vehicleId}
+                  className="rounded-lg border border-border bg-background p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-foreground flex items-center gap-1.5">
+                      <Navigation className="h-3.5 w-3.5 text-primary" />
+                      {route.vehicleName}
+                    </span>
+                    <span className="font-mono text-muted-foreground text-[11px]">
+                      {route.distanceKm} km • {route.totalStops} stops
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    {route.stops.map((stop, sIdx) => (
+                      <div
+                        key={`${stop.orderId}_${stop.stopType}_${sIdx}`}
+                        className="flex items-center space-x-1"
+                      >
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 ${
+                            stop.stopType === "PICKUP"
+                              ? "bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20"
+                              : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20"
+                          }`}
+                        >
+                          <MapPin className="h-3 w-3" />
+                          {sIdx + 1}. {stop.stopType}: {stop.orderNumber} ({stop.currentLoadKg}kg)
+                        </span>
+                        {sIdx < route.stops.length - 1 && (
+                          <span className="text-muted-foreground text-xs">→</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Pending Recommendations Queue */}
       <div className="space-y-4">

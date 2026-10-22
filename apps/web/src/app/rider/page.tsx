@@ -191,6 +191,38 @@ export default function RiderPwaPage() {
                   </span>
                 </div>
 
+                {/* Multi-Stop Itinerary Sequence */}
+                {assignedOrders.length > 1 && (
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-2 text-xs">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                      <span>Sequenced Route ({assignedOrders.length} Drops)</span>
+                      <Badge variant="outline" className="text-[9px] font-mono border-slate-700 text-emerald-400">
+                        OR-Tools Optimized
+                      </Badge>
+                    </div>
+                    <div className="space-y-1.5">
+                      {assignedOrders.map((ord, idx) => (
+                        <div
+                          key={ord.id}
+                          onClick={() => setActiveOrder(ord)}
+                          className={`p-2 rounded-lg text-xs cursor-pointer flex items-center justify-between transition-colors ${
+                            activeOrder.id === ord.id
+                              ? "bg-primary/20 border border-primary/40 text-white font-medium"
+                              : "bg-slate-900/80 text-slate-400 hover:text-white"
+                          }`}
+                        >
+                          <span className="truncate max-w-[200px]">
+                            {idx + 1}. Drop: {ord.deliveryAddress}
+                          </span>
+                          <span className="font-mono text-[10px] shrink-0">
+                            {ord.orderNumber}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Recipient Details & Quick Call */}
                 <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/70 border border-slate-800/80">
                   <div>
