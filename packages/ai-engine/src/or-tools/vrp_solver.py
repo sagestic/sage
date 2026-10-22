@@ -49,7 +49,12 @@ def solve_vrp(problem_data):
     """
     vehicles = problem_data.get("vehicles", [])
     deliveries = problem_data.get("deliveries", [])
-    depot = problem_data.get("depot", {"latitude": 51.5074, "longitude": -0.1278})
+    depot = problem_data.get("depot")
+    if not depot:
+        raise ValueError("Explicit depot required")
+    for delivery in deliveries:
+        if any(delivery.get(k) is None for k in ("pickupLat", "pickupLng", "deliveryLat", "deliveryLng")):
+            raise ValueError("Explicit pickup and delivery coordinates required")
 
     if not vehicles or not deliveries:
         return {
@@ -69,8 +74,8 @@ def solve_vrp(problem_data):
 
     for i, delivery in enumerate(deliveries):
         # Pickup Node
-        p_lat = delivery.get("pickupLat") or depot["latitude"]
-        p_lng = delivery.get("pickupLng") or depot["longitude"]
+        p_lat = delivery["pickupLat"]
+        p_lng = delivery["pickupLng"]
         p_idx = len(nodes)
         nodes.append({
             "lat": p_lat,
@@ -82,8 +87,8 @@ def solve_vrp(problem_data):
         })
 
         # Dropoff Node
-        d_lat = delivery.get("deliveryLat") or depot["latitude"]
-        d_lng = delivery.get("deliveryLng") or depot["longitude"]
+        d_lat = delivery["deliveryLat"]
+        d_lng = delivery["deliveryLng"]
         d_idx = len(nodes)
         nodes.append({
             "lat": d_lat,
