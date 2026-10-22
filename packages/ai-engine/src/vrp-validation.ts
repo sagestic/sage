@@ -42,6 +42,7 @@ export function validateVrpSolution(problem: VrpProblemRequest, raw: unknown): V
     if (usedVehicles.has(route.vehicleId)) errors.push(`Duplicate vehicle route: ${route.vehicleId}`);
     usedVehicles.add(route.vehicleId);
     let load = 0;
+    const routePickups = new Set<string>();
     if (route.totalStops !== route.stops.length) errors.push(`Stop count mismatch: ${route.vehicleId}`);
     if (!Number.isFinite(route.distanceMeters) || route.distanceMeters < 0 ||
         !Number.isFinite(route.distanceKm) || Math.abs(route.distanceKm * 1000 - route.distanceMeters) > 10)
@@ -54,9 +55,10 @@ export function validateVrpSolution(problem: VrpProblemRequest, raw: unknown): V
       if (stop.stopType === "PICKUP") {
         if (pickups.has(stop.orderId)) errors.push(`Duplicate pickup: ${stop.orderId}`);
         pickups.add(stop.orderId);
+        routePickups.add(stop.orderId);
         load += order.weightKg ?? 3;
       } else if (stop.stopType === "DROPOFF") {
-        if (!pickups.has(stop.orderId)) errors.push(`Dropoff before pickup: ${stop.orderId}`);
+        if (!routePickups.has(stop.orderId)) errors.push(`Dropoff before pickup: ${stop.orderId}`);
         if (dropoffs.has(stop.orderId)) errors.push(`Duplicate dropoff: ${stop.orderId}`);
         dropoffs.add(stop.orderId);
         load -= order.weightKg ?? 3;
