@@ -95,7 +95,7 @@ def solve_vrp(problem_data):
         })
 
         pickup_dropoff_pairs.append([p_idx, d_idx])
-        weight = max(1, int(delivery.get("weightKg", 2)))
+        weight = max(1, round(float(delivery.get("weightKg", 2)) * 1000))
         demands.append(weight)   # Pickup adds to vehicle load
         demands.append(-weight)  # Dropoff removes from vehicle load
 
@@ -130,7 +130,7 @@ def solve_vrp(problem_data):
         return demands[from_node]
 
     demand_callback_index = routing.RegisterUnaryTransitCallback(demand_callback)
-    vehicle_capacities = [max(10, int(v.get("capacity", 30))) for v in vehicles]
+    vehicle_capacities = [max(1, round(float(v.get("capacity", 30)) * 1000)) for v in vehicles]
 
     routing.AddDimensionWithVehicleCapacity(
         demand_callback_index,
@@ -140,6 +140,9 @@ def solve_vrp(problem_data):
         "Capacity"
     )
 
+    order_callback = routing.RegisterTransitCallback(lambda _from, _to: 1)
+    routing.AddDimension(order_callback, 0, num_locations, True, "StopOrder")
+
     # Pickup and Delivery constraints
     for pickup_idx, dropoff_idx in pickup_dropoff_pairs:
         p_index = manager.NodeToIndex(pickup_idx)
@@ -147,11 +150,10 @@ def solve_vrp(problem_data):
         routing.AddPickupAndDelivery(p_index, d_index)
         # Same vehicle constraint
         routing.solver().Add(routing.VehicleVar(p_index) == routing.VehicleVar(d_index))
-        # Precedence constraint: Pickup must precede Dropoff
-        distance_dimension = routing.GetDimensionOrDie("Capacity")
+        # Order dimension enforces pickup-before-dropoff independently of load.
         routing.solver().Add(
-            routing.GetDimensionOrDie("Capacity").CumulVar(p_index) <=
-            routing.GetDimensionOrDie("Capacity").CumulVar(d_index)
+            routing.GetDimensionOrDie("StopOrder").CumulVar(p_index) <=
+            routing.GetDimensionOrDie("StopOrder").CumulVar(d_index)
         )
 
     # Allow dropping nodes with penalty if impossible to serve
@@ -202,7 +204,7 @@ def solve_vrp(problem_data):
                     "address": node_info["address"],
                     "latitude": node_info["lat"],
                     "longitude": node_info["lng"],
-                    "currentLoadKg": current_load
+                    "currentLoadKg": current_load / 1000.0
                 })
                 assigned_orders.add(node_info["order_id"])
 
@@ -225,7 +227,7 @@ def solve_vrp(problem_data):
     unassigned_orders = [d["id"] for d in deliveries if d["id"] not in assigned_orders]
 
     return {
-        "status": "OPTIMAL",
+        "status": "FEASIBLE",
         "solver": "Google OR-Tools (CVRP + PDP)",
         "totalDistanceMeters": total_distance,
         "totalDistanceKm": round(total_distance / 1000.0, 2),
