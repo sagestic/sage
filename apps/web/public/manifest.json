@@ -1,0 +1,16 @@
+{
+  "name": "Sage Rider - Logistics Operations",
+  "short_name": "Sage Rider",
+  "description": "Progressive Web App for Sage couriers and delivery drivers",
+  "start_url": "/rider",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

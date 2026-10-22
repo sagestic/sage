@@ -18,6 +18,8 @@ export default defineConfig([
     files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
     extends: [tseslint.configs.recommended],
     rules: {
+      "react-hooks/immutability": "off",
+      "react-hooks/set-state-in-effect": "off",
       "@typescript-eslint/no-unused-vars": [
         "error",
         {

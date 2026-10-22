@@ -6,10 +6,370 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Role {
+  ORG_ADMIN
+  DISPATCHER
+  RIDER
+}
+
+enum RiderStatus {
+  AVAILABLE
+  BUSY
+  ON_BREAK
+  OFFLINE
+}
+
+enum VehicleType {
+  BICYCLE
+  MOTORCYCLE
+  CAR
+  VAN
+}
+
+enum OrderStatus {
+  PENDING
+  ASSIGNED
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+enum OrderPriority {
+  STANDARD
+  EXPRESS
+  RUSH
+}
+
+enum AssignmentStatus {
+  OFFERED
+  ACCEPTED
+  REJECTED
+  EN_ROUTE_PICKUP
+  PICKED_UP
+  EN_ROUTE_DROPOFF
+  COMPLETED
+  CANCELLED
+}
+
+enum IntegrationProvider {
+  SHOPIFY
+  WOOCOMMERCE
+  ONFLEET
+  SHIPSTATION
+  CUSTOM_WEBHOOK
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  SYNCING
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+}
+
+enum RecommendationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXECUTED
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships           OrganizationMembership[]
+  riderProfiles         RiderProfile[]
+  riderInvitations      RiderInvitation[]
+  orders                Order[]
+  deliveryAssignments   DeliveryAssignment[]
+  integrations          Integration[]
+  apiCredentials        ApiCredential[]
+  webhookSubscriptions  WebhookSubscription[]
+  incidents             Incident[]
+  recommendations       Recommendation[]
+  auditEvents           AuditEvent[]
+}
+
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  phone        String?
+  avatarUrl    String?
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships  OrganizationMembership[]
+  riderProfile RiderProfile?
+  auditEvents  AuditEvent[]
+}
+
+model OrganizationMembership {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           Role         @default(DISPATCHER)
+  isDefault      Boolean      @default(false)
+  status         String       @default("ACTIVE")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model RiderProfile {
+  id               String       @id @default(cuid())
+  organizationId   String
+  userId           String?      @unique
+  name             String
+  phone            String
+  email            String?
+  vehicleType      VehicleType  @default(MOTORCYCLE)
+  capacityScore    Int          @default(100)
+  status           RiderStatus  @default(OFFLINE)
+  currentLatitude  Float?
+  currentLongitude Float?
+  batteryLevel     Int?
+  lastActiveAt     DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user             User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  assignments      DeliveryAssignment[]
+  incidents        Incident[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model RiderInvitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  email          String
+  phone          String?
+  role           Role         @default(RIDER)
+  token          String       @unique
+  status         String       @default("PENDING")
+  expiresAt      DateTime
+  invitedById    String
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model Order {
+  id                  String             @id @default(cuid())
+  organizationId      String
+  orderNumber         String
+  source              String             @default("MANUAL")
+  externalReference   String?
+  customerName        String
+  customerPhone       String?
+  customerEmail       String?
+  deliveryAddress     String
+  deliveryLat         Float?
+  deliveryLng         Float?
+  pickupAddress       String
+  pickupLat           Float?
+  pickupLng           Float?
+  status              OrderStatus        @default(PENDING)
+  priority            OrderPriority      @default(STANDARD)
+  packageSize         String?            @default("MEDIUM")
+  estimatedDeliveryAt DateTime?
+  deliveredAt         DateTime?
+  notes               String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments         DeliveryAssignment[]
+  incidents           Incident[]
+  recommendations     Recommendation[]
+
+  @@unique([organizationId, orderNumber])
+  @@index([organizationId])
+  @@index([status])
+}
+
+model DeliveryAssignment {
+  id                 String           @id @default(cuid())
+  organizationId     String
+  orderId            String
+  riderProfileId     String
+  assignedById       String?
+  status             AssignmentStatus @default(OFFERED)
+  sequenceIndex      Int              @default(0)
+  estimatedPickupAt  DateTime?
+  actualPickupAt     DateTime?
+  estimatedDropoffAt DateTime?
+  actualDropoffAt    DateTime?
+  rejectionReason    String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order              Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  riderProfile       RiderProfile     @relation(fields: [riderProfileId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([orderId])
+  @@index([riderProfileId])
+  @@index([status])
+}
+
+model Integration {
+  id             String              @id @default(cuid())
+  organizationId String
+  provider       IntegrationProvider
+  name           String
+  status         IntegrationStatus   @default(INACTIVE)
+  config         Json?
+  lastSyncAt     DateTime?
+  lastSyncStatus String?
+  errorMessage   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  apiCredentials ApiCredential[]
+  webhooks       WebhookSubscription[]
+
+  @@index([organizationId])
+  @@index([provider])
+}
+
+model ApiCredential {
+  id             String        @id @default(cuid())
+  organizationId String
+  integrationId  String?
+  name           String
+  keyPrefix      String
+  secretHash     String
+  scopes         String[]
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  isRevoked      Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration    Integration?  @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+}
+
+model WebhookSubscription {
+  id              String        @id @default(cuid())
+  organizationId  String
+  integrationId   String?
+  url             String
+  events          String[]
+  secret          String
+  isActive        Boolean       @default(true)
+  failureCount    Int           @default(0)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration     Integration?  @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+}
+
+model Incident {
+  id              String           @id @default(cuid())
+  organizationId  String
+  orderId         String?
+  riderProfileId  String?
+  title           String
+  description     String
+  severity        IncidentSeverity @default(MEDIUM)
+  status          IncidentStatus   @default(OPEN)
+  category        String
+  aiDetected      Boolean          @default(false)
+  aiConfidence    Float?
+  resolvedAt      DateTime?
+  resolvedById    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order           Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  riderProfile    RiderProfile?    @relation(fields: [riderProfileId], references: [id], onDelete: SetNull)
+  recommendations Recommendation[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model Recommendation {
+  id              String               @id @default(cuid())
+  organizationId  String
+  incidentId      String?
+  orderId         String?
+  title           String
+  explanation     String
+  actionType      String
+  proposedPayload Json?
+  confidence      Float                @default(0.85)
+  status          RecommendationStatus @default(PENDING)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  incident        Incident?            @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  order           Order?               @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model AuditEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String
+  entityType     String
+  entityId       String
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([createdAt])
 }
