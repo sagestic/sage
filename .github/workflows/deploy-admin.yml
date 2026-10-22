@@ -2,7 +2,7 @@ name: Deploy Admin
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
     paths:
       - "apps/admin/**"
       - "packages/site-schema/**"
