@@ -173,6 +173,24 @@ export default function RiderPwaPage() {
           </Badge>
         </div>
 
+        {/* Courier Cash Float Bar (COD Wallet) */}
+        <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/80 px-3.5 py-2.5 text-xs shadow-md">
+          <div className="flex items-center space-x-2.5">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-400 font-black text-xs">
+              ₦
+            </div>
+            <div>
+              <span className="text-slate-400 text-[11px]">Rider Cash Float (COD): </span>
+              <span className="font-mono font-bold text-white">
+                ₦{(rider?.cashFloatBalance || 0).toLocaleString()}
+              </span>
+            </div>
+          </div>
+          <Badge variant="outline" className="border-slate-800 text-emerald-400 bg-emerald-500/10 text-[10px] font-mono">
+            Active Float
+          </Badge>
+        </div>
+
         {toastMessage && (
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/80 p-3 text-xs text-emerald-200 flex items-center gap-2 shadow-lg animate-in fade-in-50">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
@@ -352,14 +370,13 @@ export default function RiderPwaPage() {
                         size="sm"
                         className="text-xs h-8 bg-emerald-700 hover:bg-emerald-600 text-white font-bold"
                         onClick={() => {
-                          sageRepo.markOrderPaid(
+                          sageRepo.recordCodCollection(
                             orgId,
                             activeOrder.id,
                             activeOrder.paymentAmount || 4500,
-                            `cash_${Date.now()}`,
-                            "CASH",
+                            rider?.id,
                           );
-                          setToastMessage("Cash collected & verified! Package cleared for release.");
+                          setToastMessage("Cash collected & recorded in float! Package cleared for release.");
                           loadData();
                         }}
                       >

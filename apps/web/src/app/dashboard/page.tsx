@@ -57,6 +57,12 @@ export default async function DashboardOverviewPage() {
         </div>
 
         <div className="flex items-center space-x-2.5">
+          <Link href="/onboarding">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Onboarding Wizard
+            </Button>
+          </Link>
           <Link href="/dashboard/recommendations">
             <Button variant="outline" size="sm" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
               <Sparkles className="h-4 w-4 text-primary" />
@@ -70,6 +76,47 @@ export default async function DashboardOverviewPage() {
             </Button>
           </Link>
         </div>
+      </div>
+
+      {/* Operating Model & Cash on Delivery (COD) Status Banner */}
+      <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center space-x-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 font-bold">
+            ₦
+          </div>
+          <div>
+            <div className="font-bold text-foreground flex items-center gap-2">
+              <span>
+                Operating Model:{" "}
+                {metrics.operatingModel === "ECOMMERCE_COD"
+                  ? "E-Commerce & Cash on Delivery (COD)"
+                  : metrics.operatingModel.replace("_", " ")}
+              </span>
+              <Badge
+                variant="outline"
+                className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-mono"
+              >
+                COD Reconciled
+              </Badge>
+            </div>
+            <div className="text-muted-foreground mt-0.5">
+              Active Courier Cash Float:{" "}
+              <span className="font-mono font-bold text-foreground">
+                ₦{metrics.totalCourierCashFloat.toLocaleString()}
+              </span>{" "}
+              • Pending Merchant Remittance:{" "}
+              <span className="font-mono font-bold text-foreground">
+                ₦{metrics.codPendingRemittance.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <Link href="/onboarding">
+          <Button variant="ghost" size="sm" className="h-7 text-xs text-primary hover:underline">
+            Switch Operating Model →
+          </Button>
+        </Link>
       </div>
 
       {/* Critical Incident Banner if active */}

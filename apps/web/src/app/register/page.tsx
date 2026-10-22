@@ -42,7 +42,7 @@ export default function RegisterPage() {
     // Set tenant cookie
     document.cookie = `sage_tenant_slug=${data.organizationSlug}; path=/; max-age=2592000`;
     document.cookie = `sage_user_role=ORG_ADMIN; path=/; max-age=2592000`;
-    router.push("/dashboard");
+    router.push("/onboarding");
   };
 
   return (

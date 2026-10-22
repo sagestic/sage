@@ -62,6 +62,11 @@ export interface OrderItem {
   paystackReference?: string;
   paystackPaymentUrl?: string;
   paidAt?: string;
+  orderType?: "STANDARD" | "CASH_ON_DELIVERY" | "PREPAID_EXPRESS" | "B2B_SCHEDULED";
+  codAmountNgn?: number;
+  itemValueNgn?: number;
+  deliveryFeeNgn?: number;
+  codRemittanceStatus?: "PENDING" | "REMITTED" | "NOT_APPLICABLE";
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -83,6 +88,7 @@ export interface RiderItem {
   batteryLevel: number;
   activeOrderCount: number;
   completedTodayCount: number;
+  cashFloatBalance?: number;
   lastActiveAt: string;
 }
 
@@ -1277,6 +1283,151 @@ class SageDataStore {
     return { authorizationUrl, reference, amount };
   }
 
+  // Cash on Delivery (COD) Collection & Courier Cash Float
+  recordCodCollection(
+    orgId: string,
+    orderIdOrNumber: string,
+    amountCollected: number,
+    riderId?: string,
+  ): boolean {
+    const order = this.orders.find(
+      (o) =>
+        (o.organizationId === orgId || !orgId) &&
+        (o.id === orderIdOrNumber || o.orderNumber === orderIdOrNumber),
+    );
+    if (!order) return false;
+
+    const rider = this.riders.find(
+      (r) => r.id === (riderId || order.assignedRiderId),
+    );
+
+    order.paymentStatus = "PAID";
+    order.paymentAmount = amountCollected;
+    order.codRemittanceStatus = "PENDING";
+    order.paidAt = new Date().toISOString();
+    order.updatedAt = new Date().toISOString();
+
+    if (rider) {
+      rider.cashFloatBalance = (rider.cashFloatBalance || 0) + amountCollected;
+    }
+
+    const codDetails = `COD cash collection: Courier ${rider?.name || "assigned"} collected ₦${amountCollected.toLocaleString()} in cash. Added to rider cash float (Current balance: ₦${(rider?.cashFloatBalance || amountCollected).toLocaleString()}). Pending merchant remittance.`;
+    order.notes = order.notes ? `${order.notes} | ${codDetails}` : codDetails;
+
+    this.logAudit(
+      order.organizationId,
+      "Rider PWA / COD Engine",
+      "COURIER",
+      "COD_CASH_COLLECTED",
+      "ORDER",
+      order.id,
+      codDetails,
+    );
+
+    this.dispatchWebhookEvent(order.organizationId, "delivery.status_updated", {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      paymentStatus: "PAID",
+      codCollected: amountCollected,
+      riderName: rider?.name,
+    });
+
+    return true;
+  }
+
+  remitRiderCashFloat(orgId: string, riderId: string): { remittedAmount: number } {
+    const rider = this.riders.find((r) => r.organizationId === orgId && r.id === riderId);
+    if (!rider) return { remittedAmount: 0 };
+
+    const amount = rider.cashFloatBalance || 0;
+    rider.cashFloatBalance = 0;
+
+    // Update associated orders to REMITTED
+    this.orders
+      .filter((o) => o.organizationId === orgId && o.assignedRiderId === rider.id && o.codRemittanceStatus === "PENDING")
+      .forEach((o) => {
+        o.codRemittanceStatus = "REMITTED";
+      });
+
+    this.logAudit(
+      orgId,
+      "Dispatcher / Finance",
+      "DISPATCHER",
+      "RIDER_FLOAT_REMITTED",
+      "RIDER",
+      rider.id,
+      `Remitted cash float of ₦${amount.toLocaleString()} from ${rider.name} to logistics treasury.`,
+    );
+
+    return { remittedAmount: amount };
+  }
+
+  private organizationSettings: Record<string, {
+    operatingModel: "ECOMMERCE_COD" | "ON_DEMAND_EXPRESS" | "WHATSAPP_COMMERCE" | "B2B_DISTRIBUTION";
+    defaultCity: string;
+    defaultDepotAddress: string;
+    defaultDeliveryFeeNgn: number;
+    acceptsCashOnDelivery: boolean;
+    acceptsOnlinePaystack: boolean;
+    activeIntakeChannels: string[];
+    onboardedAt?: string;
+  }> = {
+    org_apex_logistics: {
+      operatingModel: "ECOMMERCE_COD",
+      defaultCity: "Lagos",
+      defaultDepotAddress: "Mainland Logistics Hub, Ikeja, Lagos",
+      defaultDeliveryFeeNgn: 4500,
+      acceptsCashOnDelivery: true,
+      acceptsOnlinePaystack: true,
+      activeIntakeChannels: ["WHATSAPP", "SHOPIFY", "WEBSITE_API", "TRACKING_WIDGET"],
+      onboardedAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+    },
+  };
+
+  getOrganizationSettings(orgId: string) {
+    return (
+      this.organizationSettings[orgId] || {
+        operatingModel: "ECOMMERCE_COD",
+        defaultCity: "Lagos",
+        defaultDepotAddress: "Mainland Logistics Hub, Ikeja",
+        defaultDeliveryFeeNgn: 4500,
+        acceptsCashOnDelivery: true,
+        acceptsOnlinePaystack: true,
+        activeIntakeChannels: ["WHATSAPP", "WEBSITE_API"],
+      }
+    );
+  }
+
+  saveOrganizationSettings(
+    orgId: string,
+    settings: Partial<{
+      operatingModel: "ECOMMERCE_COD" | "ON_DEMAND_EXPRESS" | "WHATSAPP_COMMERCE" | "B2B_DISTRIBUTION";
+      defaultCity: string;
+      defaultDepotAddress: string;
+      defaultDeliveryFeeNgn: number;
+      acceptsCashOnDelivery: boolean;
+      acceptsOnlinePaystack: boolean;
+      activeIntakeChannels: string[];
+    }>,
+  ) {
+    const existing = this.getOrganizationSettings(orgId);
+    this.organizationSettings[orgId] = {
+      ...existing,
+      ...settings,
+      onboardedAt: new Date().toISOString(),
+    };
+    this.logAudit(
+      orgId,
+      "Onboarding Wizard",
+      "ADMIN",
+      "OPERATING_MODEL_CONFIGURED",
+      "SETTINGS",
+      orgId,
+      `Updated logistics operating model to ${this.organizationSettings[orgId].operatingModel} in ${this.organizationSettings[orgId].defaultCity}.`,
+    );
+    return this.organizationSettings[orgId];
+  }
+
   // Riders
   getRiders(orgId: string, statusFilter?: string): RiderItem[] {
     return this.riders.filter(
@@ -1743,6 +1894,12 @@ class SageDataStore {
     const openIncidents = tenantIncidents.filter((i) => i.status === "OPEN" || i.status === "INVESTIGATING").length;
     const healthyIntegrations = tenantIntegrations.filter((i) => i.status === "ACTIVE").length;
 
+    const codPendingRemittance = tenantOrders
+      .filter((o) => o.codRemittanceStatus === "PENDING")
+      .reduce((sum, o) => sum + (o.codAmountNgn || o.paymentAmount || 0), 0);
+    const totalCourierCashFloat = tenantRiders
+      .reduce((sum, r) => sum + (r.cashFloatBalance || 0), 0);
+
     return {
       activeDeliveries,
       pendingAssignments,
@@ -1754,6 +1911,9 @@ class SageDataStore {
       healthyIntegrations,
       totalIntegrations: tenantIntegrations.length,
       slaPercentage: 98.4,
+      codPendingRemittance,
+      totalCourierCashFloat,
+      operatingModel: this.getOrganizationSettings(orgId).operatingModel,
     };
   }
 }
