@@ -27,7 +27,10 @@ export const IntegrationProviderSchema = z.enum([
   "WOOCOMMERCE",
   "ONFLEET",
   "SHIPSTATION",
+  "WHATSAPP",
+  "WEBSITE_API",
   "CUSTOM_WEBHOOK",
+  "CSV_IMPORT",
 ]);
 export type IntegrationProvider = z.infer<typeof IntegrationProviderSchema>;
 
@@ -36,6 +39,7 @@ export const IntegrationStatusSchema = z.enum([
   "INACTIVE",
   "ERROR",
   "SYNCING",
+  "COMING_SOON",
 ]);
 export type IntegrationStatus = z.infer<typeof IntegrationStatusSchema>;
 
@@ -49,6 +53,28 @@ export const IncidentStatusSchema = z.enum([
   "DISMISSED",
 ]);
 export type IncidentStatus = z.infer<typeof IncidentStatusSchema>;
+
+export const WebhookEventSchema = z.enum([
+  "order.created",
+  "order.updated",
+  "delivery.assigned",
+  "delivery.status_updated",
+  "incident.created",
+  "recommendation.created",
+]);
+export type WebhookEvent = z.infer<typeof WebhookEventSchema>;
+
+export const CoordinatesSchema = z.object({
+  latitude: z
+    .number()
+    .min(-90, "Latitude must be >= -90")
+    .max(90, "Latitude must be <= 90"),
+  longitude: z
+    .number()
+    .min(-180, "Longitude must be >= -180")
+    .max(180, "Longitude must be <= 180"),
+});
+export type Coordinates = z.infer<typeof CoordinatesSchema>;
 
 export const UserSchema = z.object({
   id: z.string(),
@@ -68,6 +94,27 @@ export const OrganizationSchema = z.object({
 });
 export type Organization = z.infer<typeof OrganizationSchema>;
 
+// Canonical Order Ingestion Schema
+export const IngestOrderSchema = z.object({
+  source: IntegrationProviderSchema.default("WEBSITE_API"),
+  externalOrderId: z.string().optional(),
+  idempotencyKey: z.string().optional(),
+  recipientName: z.string().min(2, "Recipient name is required"),
+  recipientPhone: z.string().min(5, "Recipient phone is required"),
+  recipientEmail: z.string().email().optional().or(z.literal("")),
+  pickupAddress: z.string().min(5, "Pickup address is required"),
+  pickupCoordinates: CoordinatesSchema.optional(),
+  dropoffAddress: z.string().min(5, "Dropoff address is required"),
+  dropoffCoordinates: CoordinatesSchema.optional(),
+  priority: OrderPrioritySchema.default("STANDARD"),
+  packageSize: z.string().default("MEDIUM"),
+  packageWeightKg: z.number().min(0).max(500).optional(),
+  deliveryDeadline: z.string().optional(),
+  notes: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+export type IngestOrderInput = z.infer<typeof IngestOrderSchema>;
+
 // Form schemas for React Hook Form + Zod
 export const CreateOrderSchema = z.object({
   orderNumber: z.string().min(2, "Order number is required"),
@@ -76,26 +123,35 @@ export const CreateOrderSchema = z.object({
   customerPhone: z.string().min(5, "Customer phone is required"),
   customerEmail: z.string().email().optional().or(z.literal("")),
   pickupAddress: z.string().min(5, "Pickup address is required"),
-  pickupLat: z.number().optional(),
-  pickupLng: z.number().optional(),
+  pickupLat: z.number().min(-90).max(90).optional(),
+  pickupLng: z.number().min(-180).max(180).optional(),
   deliveryAddress: z.string().min(5, "Delivery address is required"),
-  deliveryLat: z.number().optional(),
-  deliveryLng: z.number().optional(),
+  deliveryLat: z.number().min(-90).max(90).optional(),
+  deliveryLng: z.number().min(-180).max(180).optional(),
   priority: OrderPrioritySchema.default("STANDARD"),
   packageSize: z.string().default("MEDIUM"),
   notes: z.string().optional(),
 });
 export type CreateOrderInput = z.infer<typeof CreateOrderSchema>;
 
+// Rider Invitation Schema (Name & phone required, email & employeeId optional)
 export const InviteRiderSchema = z.object({
   name: z.string().min(2, "Rider name is required"),
-  email: z.string().email("Valid email is required"),
   phone: z.string().min(8, "Phone number is required"),
+  email: z.string().email("Valid email is required").optional().or(z.literal("")),
+  employeeId: z.string().optional(),
   vehicleType: VehicleTypeSchema.default("MOTORCYCLE"),
   capacityScore: z.number().min(10).max(500).default(100),
   role: RoleSchema.default("RIDER"),
 });
 export type InviteRiderInput = z.infer<typeof InviteRiderSchema>;
+
+export const AcceptInvitationSchema = z.object({
+  token: z.string().min(8, "Valid invitation token required"),
+  name: z.string().min(2, "Name is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+export type AcceptInvitationInput = z.infer<typeof AcceptInvitationSchema>;
 
 export const CreateIncidentSchema = z.object({
   title: z.string().min(3, "Title is required"),

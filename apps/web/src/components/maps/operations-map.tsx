@@ -162,7 +162,13 @@ export function OperationsMap({
         {/* Active Route Polylines connecting In-Transit orders to Assigned Riders */}
         <svg className="absolute inset-0 h-full w-full pointer-events-none">
           {orders
-            .filter((o) => o.status === "IN_TRANSIT" && o.assignedRiderId)
+            .filter(
+              (o) =>
+                o.status === "IN_TRANSIT" &&
+                o.assignedRiderId &&
+                o.deliveryLat !== undefined &&
+                o.deliveryLng !== undefined,
+            )
             .map((order) => {
               const rider = riders.find((r) => r.id === order.assignedRiderId);
               if (!rider) return null;
@@ -171,8 +177,8 @@ export function OperationsMap({
                 rider.currentLongitude,
               );
               const dPos = projectCoordinates(
-                order.deliveryLat,
-                order.deliveryLng,
+                order.deliveryLat!,
+                order.deliveryLng!,
               );
 
               return (
@@ -205,8 +211,12 @@ export function OperationsMap({
             .filter((i) => i.status !== "RESOLVED")
             .map((incident) => {
               const relatedOrder = orders.find((o) => o.id === incident.orderId);
-              const pos = relatedOrder
-                ? projectCoordinates(relatedOrder.deliveryLat, relatedOrder.deliveryLng)
+              const hasCoords =
+                relatedOrder &&
+                relatedOrder.deliveryLat !== undefined &&
+                relatedOrder.deliveryLng !== undefined;
+              const pos = hasCoords
+                ? projectCoordinates(relatedOrder.deliveryLat!, relatedOrder.deliveryLng!)
                 : { x: 55, y: 48 };
 
               return (
@@ -242,9 +252,14 @@ export function OperationsMap({
 
         {/* Order Destination Markers */}
         {orders
-          .filter((o) => o.status !== "DELIVERED")
+          .filter(
+            (o) =>
+              o.status !== "DELIVERED" &&
+              o.deliveryLat !== undefined &&
+              o.deliveryLng !== undefined,
+          )
           .map((order) => {
-            const pos = projectCoordinates(order.deliveryLat, order.deliveryLng);
+            const pos = projectCoordinates(order.deliveryLat!, order.deliveryLng!);
             const isSelected = order.id === selectedOrderId;
 
             return (

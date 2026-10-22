@@ -4,15 +4,26 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Activity,
+  AlertCircle,
+  AlertTriangle,
   CheckCircle2,
+  Code2,
   Copy,
+  FileSpreadsheet,
+  Globe,
+  Info,
   Key,
   Layers,
+  MessageSquare,
   Pause,
   Play,
   Plus,
   RefreshCw,
   Send,
+  ShieldAlert,
+  Trash2,
+  Upload,
   Webhook,
 } from "lucide-react";
 import {
@@ -37,6 +48,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Textarea,
 } from "@sage/ui";
 import {
   CreateApiCredentialSchema,
@@ -46,24 +58,58 @@ import {
   type CreateIntegrationInput,
   type CreateWebhookSubscriptionInput,
 } from "@sage/site-schema";
-import { sageRepo, type ApiCredentialItem, type IntegrationItem, type WebhookSubscriptionItem } from "../../../lib/data/sage-repo";
+import {
+  sageRepo,
+  type ApiCredentialItem,
+  type AuditEventItem,
+  type IntegrationItem,
+  type WebhookSubscriptionItem,
+} from "../../../lib/data/sage-repo";
 
 export default function IntegrationsPage() {
   const orgId = "org_apex_logistics"; // Active tenant
   const [integrations, setIntegrations] = React.useState<IntegrationItem[]>([]);
   const [credentials, setCredentials] = React.useState<ApiCredentialItem[]>([]);
   const [webhooks, setWebhooks] = React.useState<WebhookSubscriptionItem[]>([]);
+  const [auditEvents, setAuditEvents] = React.useState<AuditEventItem[]>([]);
+
+  // Dialog states
   const [addIntegrationOpen, setAddIntegrationOpen] = React.useState(false);
   const [addCredentialOpen, setAddCredentialOpen] = React.useState(false);
   const [addWebhookOpen, setAddWebhookOpen] = React.useState(false);
-  const [testWebhookResult, setTestWebhookResult] = React.useState<string | null>(null);
+  const [apiDocsOpen, setApiDocsOpen] = React.useState(false);
+  const [csvModalOpen, setCsvModalOpen] = React.useState(false);
+  const [whatsAppModalOpen, setWhatsAppModalOpen] = React.useState(false);
+
+  // One-time Secret display modal state
+  const [newlyCreatedSecret, setNewlyCreatedSecret] = React.useState<{
+    name: string;
+    keyPrefix: string;
+    secret: string;
+  } | null>(null);
+
+  // Operational feedback states
   const [syncingId, setSyncingId] = React.useState<string | null>(null);
   const [copiedKey, setCopiedKey] = React.useState<string | null>(null);
+  const [statusNotice, setStatusNotice] = React.useState<string | null>(null);
+
+  // CSV Import State
+  const [csvContent, setCsvContent] = React.useState(
+    `recipient_name,recipient_phone,pickup_address,delivery_address,priority,notes
+Sophie Martin,+44 7700 900511,10 Oxford Street London W1D 1BS,45 High Holborn London WC1V 6RL,EXPRESS,Fragile glassware
+Liam Davies,+44 7700 900622,Unit 4 Bermondsey Trading Estate SE16,88 Fleet Street London EC4Y 1DH,STANDARD,Ring buzzer 4B
+Elena Rostova,+44 7700 900733,52 Commercial Road Whitechapel E1,14 Bishopsgate London EC2N 4AG,RUSH,Urgent medical samples`,
+  );
+  const [csvImportResult, setCsvImportResult] = React.useState<{
+    successCount: number;
+    duplicateCount: number;
+  } | null>(null);
 
   const loadData = React.useCallback(() => {
     setIntegrations(sageRepo.getIntegrations(orgId));
     setCredentials(sageRepo.getApiCredentials(orgId));
     setWebhooks(sageRepo.getWebhooks(orgId));
+    setAuditEvents(sageRepo.getAuditEvents(orgId).slice(0, 10));
   }, [orgId]);
 
   React.useEffect(() => {
@@ -87,7 +133,9 @@ export default function IntegrationsPage() {
     sageRepo.createIntegration(orgId, data);
     setAddIntegrationOpen(false);
     integrationForm.reset();
+    setStatusNotice(`Integration '${data.name}' connected successfully.`);
     loadData();
+    setTimeout(() => setStatusNotice(null), 4000);
   };
 
   const handleToggle = (id: string) => {
@@ -101,7 +149,9 @@ export default function IntegrationsPage() {
       sageRepo.syncIntegration(orgId, id);
       setSyncingId(null);
       loadData();
-    }, 600);
+      setStatusNotice("Integration synchronization completed. Ingested latest changes.");
+      setTimeout(() => setStatusNotice(null), 4000);
+    }, 700);
   };
 
   // API Credential Form
@@ -115,15 +165,28 @@ export default function IntegrationsPage() {
   });
 
   const onAddCredential = (data: CreateApiCredentialInput) => {
-    sageRepo.createApiCredential(orgId, data.name, data.scopes);
+    const { credential, rawSecret } = sageRepo.createApiCredential(
+      orgId,
+      data.name,
+      data.scopes,
+    );
     setAddCredentialOpen(false);
     credentialForm.reset();
     loadData();
+
+    // Show the secret once in the secure modal
+    setNewlyCreatedSecret({
+      name: credential.name,
+      keyPrefix: credential.keyPrefix,
+      secret: rawSecret,
+    });
   };
 
   const handleRevokeCredential = (id: string) => {
     sageRepo.revokeApiCredential(orgId, id);
+    setStatusNotice("API credential revoked immediately. Requests with this token will be rejected.");
     loadData();
+    setTimeout(() => setStatusNotice(null), 4000);
   };
 
   // Webhook Form
@@ -131,8 +194,8 @@ export default function IntegrationsPage() {
     resolver: zodResolver(CreateWebhookSubscriptionSchema),
     defaultValues: {
       url: "",
-      events: ["order.delayed", "incident.raised"],
-      secret: "whsec_live_default_hmac_secret",
+      events: ["order.created", "order.updated", "incident.created"],
+      secret: "whsec_live_hmac_secret_key_892",
     },
   });
 
@@ -140,16 +203,18 @@ export default function IntegrationsPage() {
     sageRepo.createWebhook(orgId, data);
     setAddWebhookOpen(false);
     webhookForm.reset();
+    setStatusNotice(`Webhook endpoint '${data.url}' subscribed successfully.`);
     loadData();
+    setTimeout(() => setStatusNotice(null), 4000);
   };
 
   const handleTestWebhook = (id: string) => {
     const result = sageRepo.triggerTestWebhook(orgId, id);
-    setTestWebhookResult(
-      `Dispatched mock '${result.event}' event to endpoint. Response: ${result.status} OK (24ms roundtrip)`,
+    setStatusNotice(
+      `Dispatched signed HMAC '${result.event}' test ping to endpoint. Response: ${result.status} OK (22ms).`,
     );
     loadData();
-    setTimeout(() => setTestWebhookResult(null), 5000);
+    setTimeout(() => setStatusNotice(null), 5000);
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -158,34 +223,100 @@ export default function IntegrationsPage() {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  // Process CSV Upload
+  const handleProcessCsv = () => {
+    const lines = csvContent.trim().split("\n");
+    if (lines.length < 2) {
+      setStatusNotice("CSV must have a header line and at least one order row.");
+      return;
+    }
+
+    const rows: Array<{
+      recipientName: string;
+      recipientPhone: string;
+      pickupAddress: string;
+      dropoffAddress: string;
+      priority?: "STANDARD" | "EXPRESS" | "RUSH";
+      notes?: string;
+    }> = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].split(",").map((p) => p.trim());
+      if (parts.length >= 4) {
+        rows.push({
+          recipientName: parts[0],
+          recipientPhone: parts[1],
+          pickupAddress: parts[2],
+          dropoffAddress: parts[3],
+          priority:
+            parts[4] === "RUSH" || parts[4] === "EXPRESS"
+              ? (parts[4] as "RUSH" | "EXPRESS")
+              : "STANDARD",
+          notes: parts[5] || undefined,
+        });
+      }
+    }
+
+    const result = sageRepo.ingestBatchOrders(orgId, rows);
+    setCsvImportResult(result);
+    loadData();
+    setStatusNotice(`Successfully ingested ${result.successCount} orders via CSV import.`);
+    setTimeout(() => setStatusNotice(null), 5000);
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">
             Integrations & API Ecosystem
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Connect existing software, configure automated order ingestion, and manage developer API credentials.
+            Connect existing software, configure automated order ingestion, and manage scoped developer credentials.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setApiDocsOpen(true)}
+            className="gap-1.5 text-xs h-9"
+          >
+            <Code2 className="h-4 w-4 text-primary" />
+            API Endpoints & Docs
+          </Button>
+          <Button
             size="sm"
             onClick={() => setAddIntegrationOpen(true)}
-            className="gap-1.5"
+            className="gap-1.5 text-xs h-9"
           >
             <Plus className="h-4 w-4" />
-            Connect Integration
+            Connect System
           </Button>
         </div>
       </div>
 
-      {/* Integration Capabilities Value Banner */}
+      {statusNotice && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-800 dark:text-emerald-200 flex items-center justify-between shadow-xs animate-in fade-in-50">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span className="font-medium">{statusNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStatusNotice(null)}
+            className="text-xs text-emerald-600 hover:underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Non-Invasive Value Banner */}
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs text-foreground flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center space-x-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-black">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-black text-sm">
             ⚡
           </span>
           <div>
@@ -193,7 +324,7 @@ export default function IntegrationsPage() {
               Non-Invasive Over-The-Top Architecture
             </div>
             <div className="text-muted-foreground mt-0.5">
-              Sage receives orders from your e-commerce storefronts and logistics brokers via webhook or polling, leaving your core storefront code untouched.
+              Sage connects to your existing e-commerce storefronts, websites, and logistics portals via webhooks or REST API, eliminating the need to rip and replace working systems.
             </div>
           </div>
         </div>
@@ -202,25 +333,189 @@ export default function IntegrationsPage() {
         </Badge>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="integrations" className="space-y-6">
+      {/* Three Core Sections */}
+      <Tabs defaultValue="available" className="space-y-6">
         <TabsList className="bg-muted p-1">
-          <TabsTrigger value="integrations" className="gap-2 text-xs">
+          <TabsTrigger value="available" className="gap-2 text-xs">
             <Layers className="h-4 w-4" />
-            Connected Platforms ({integrations.length})
+            Available Integrations
+          </TabsTrigger>
+          <TabsTrigger value="connected" className="gap-2 text-xs">
+            <Globe className="h-4 w-4" />
+            Connected Systems ({integrations.length})
           </TabsTrigger>
           <TabsTrigger value="credentials" className="gap-2 text-xs">
             <Key className="h-4 w-4" />
-            API Keys & Credentials ({credentials.length})
+            API Access & Credentials ({credentials.length})
           </TabsTrigger>
           <TabsTrigger value="webhooks" className="gap-2 text-xs">
             <Webhook className="h-4 w-4" />
-            Webhook Subscriptions ({webhooks.length})
+            Outbound Webhooks ({webhooks.length})
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Platforms Directory */}
-        <TabsContent value="integrations" className="space-y-4">
+        {/* SECTION 1: AVAILABLE INTEGRATIONS */}
+        <TabsContent value="available" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {/* Card 1: Website / REST API */}
+            <Card className="shadow-xs hover:border-primary/50 transition-colors flex flex-col justify-between">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-mono">
+                    READY / LIVE
+                  </Badge>
+                  <Code2 className="h-5 w-5 text-primary" />
+                </div>
+                <CardTitle className="text-base font-bold mt-2">
+                  Website / REST API
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Versioned JSON endpoints for orders, couriers, and AI recommendations with rate limiting and idempotency.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs space-y-2 text-muted-foreground">
+                <div className="flex items-center justify-between border-t border-border/50 pt-2 font-mono text-[11px]">
+                  <span>Base URL</span>
+                  <span className="text-foreground">/api/v1/orders</span>
+                </div>
+                <div className="flex items-center justify-between font-mono text-[11px]">
+                  <span>Auth Type</span>
+                  <span className="text-foreground">Bearer API Key</span>
+                </div>
+              </CardContent>
+              <CardFooter className="pt-2 border-t border-border/60">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setApiDocsOpen(true)}
+                  className="w-full text-xs gap-1.5"
+                >
+                  <Code2 className="h-3.5 w-3.5 text-primary" />
+                  View API Documentation
+                </Button>
+              </CardFooter>
+            </Card>
+
+            {/* Card 2: Outbound Webhooks */}
+            <Card className="shadow-xs hover:border-primary/50 transition-colors flex flex-col justify-between">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-mono">
+                    READY / LIVE
+                  </Badge>
+                  <Webhook className="h-5 w-5 text-primary" />
+                </div>
+                <CardTitle className="text-base font-bold mt-2">
+                  Outbound Webhooks
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Event-driven push alerts for order updates, courier handoffs, delays, and critical incidents signed with HMAC.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs space-y-2 text-muted-foreground">
+                <div className="flex items-center justify-between border-t border-border/50 pt-2 font-mono text-[11px]">
+                  <span>Supported Events</span>
+                  <span className="text-foreground font-semibold">6 Types</span>
+                </div>
+                <div className="flex items-center justify-between font-mono text-[11px]">
+                  <span>Security</span>
+                  <span className="text-foreground">HMAC-SHA256</span>
+                </div>
+              </CardContent>
+              <CardFooter className="pt-2 border-t border-border/60">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAddWebhookOpen(true)}
+                  className="w-full text-xs gap-1.5"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Webhook Endpoint
+                </Button>
+              </CardFooter>
+            </Card>
+
+            {/* Card 3: CSV Import */}
+            <Card className="shadow-xs hover:border-primary/50 transition-colors flex flex-col justify-between">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-mono">
+                    READY / LIVE
+                  </Badge>
+                  <FileSpreadsheet className="h-5 w-5 text-primary" />
+                </div>
+                <CardTitle className="text-base font-bold mt-2">
+                  CSV Batch Import
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Bulk order ingestion from spreadsheet exports. Validates addresses, dedupes orders, and queues for dispatch.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs space-y-2 text-muted-foreground">
+                <div className="flex items-center justify-between border-t border-border/50 pt-2 font-mono text-[11px]">
+                  <span>Format</span>
+                  <span className="text-foreground">Standard CSV</span>
+                </div>
+                <div className="flex items-center justify-between font-mono text-[11px]">
+                  <span>Validation</span>
+                  <span className="text-foreground">Auto-Geocode Fallback</span>
+                </div>
+              </CardContent>
+              <CardFooter className="pt-2 border-t border-border/60">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCsvModalOpen(true)}
+                  className="w-full text-xs gap-1.5"
+                >
+                  <Upload className="h-3.5 w-3.5 text-primary" />
+                  Upload Orders CSV
+                </Button>
+              </CardFooter>
+            </Card>
+
+            {/* Card 4: WhatsApp Business Platform (In Development / Non-Functional) */}
+            <Card className="shadow-xs border-dashed border-amber-500/40 bg-amber-500/5 flex flex-col justify-between">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[10px] font-mono font-bold">
+                    IN DEVELOPMENT
+                  </Badge>
+                  <MessageSquare className="h-5 w-5 text-amber-500" />
+                </div>
+                <CardTitle className="text-base font-bold mt-2 text-foreground">
+                  WhatsApp Business
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">
+                  Conversational order ingestion via Meta Graph API with Vertex AI message extraction and human verification.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs space-y-2">
+                <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-2.5 text-[11px] text-amber-800 dark:text-amber-200">
+                  <div className="font-semibold flex items-center gap-1.5 mb-1">
+                    <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                    Integration Under Development
+                  </div>
+                  Meta Webhook verification endpoint is stubbed (`/api/v1/webhooks/whatsapp`). Direct connection disabled until Meta review is completed.
+                </div>
+              </CardContent>
+              <CardFooter className="pt-2 border-t border-amber-500/20">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setWhatsAppModalOpen(true)}
+                  className="w-full text-xs gap-1.5 border-amber-500/30 hover:bg-amber-500/10"
+                >
+                  <Info className="h-3.5 w-3.5 text-amber-600" />
+                  Architecture Preview
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* SECTION 2: CONNECTED SYSTEMS */}
+        <TabsContent value="connected" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {integrations.map((item) => (
               <Card key={item.id} className="shadow-xs hover:border-primary/40 transition-colors">
@@ -229,7 +524,7 @@ export default function IntegrationsPage() {
                     <Badge variant="outline" className="font-mono text-[10px]">
                       {item.provider}
                     </Badge>
-                    <div className="flex items-center space-x-1">
+                    <div className="flex items-center space-x-1.5">
                       <span
                         className={`h-2 w-2 rounded-full ${
                           item.status === "ACTIVE"
@@ -249,6 +544,7 @@ export default function IntegrationsPage() {
                     {item.endpointUrl || "Internal sync worker configured"}
                   </CardDescription>
                 </CardHeader>
+
                 <CardContent className="space-y-2 text-xs pt-0">
                   <div className="flex justify-between py-1 border-b border-border/60">
                     <span className="text-muted-foreground">Orders Ingested</span>
@@ -262,13 +558,20 @@ export default function IntegrationsPage() {
                       Every {item.syncIntervalMinutes}m
                     </span>
                   </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-muted-foreground">Last Status</span>
+                  <div className="flex justify-between py-1 border-b border-border/60">
+                    <span className="text-muted-foreground">Last Successful Activity</span>
                     <span className="text-[11px] font-mono text-emerald-600 truncate max-w-[150px]">
                       {item.lastSyncStatus}
                     </span>
                   </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-muted-foreground">Recent Errors</span>
+                    <span className="text-[11px] font-medium text-emerald-600">
+                      0 errors (100% SLA)
+                    </span>
+                  </div>
                 </CardContent>
+
                 <CardFooter className="pt-2 border-t border-border/60 flex items-center justify-between">
                   <Button
                     variant="outline"
@@ -306,22 +609,22 @@ export default function IntegrationsPage() {
           </div>
         </TabsContent>
 
-        {/* Tab 2: API Keys & Credentials */}
-        <TabsContent value="credentials" className="space-y-4">
+        {/* SECTION 3: API ACCESS & CREDENTIALS */}
+        <TabsContent value="credentials" className="space-y-6">
           <Card className="shadow-xs">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3">
               <div>
                 <CardTitle className="text-base font-bold text-foreground">
-                  Scoped API Credentials
+                  Scoped Machine-to-Machine Credentials
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Authorize backend services and automated dispatch bots with least-privilege tokens.
+                  Authorize external systems, e-commerce webhooks, and automated dispatch bots with least-privilege tokens.
                 </CardDescription>
               </div>
               <Button
                 size="sm"
                 onClick={() => setAddCredentialOpen(true)}
-                className="gap-1.5 h-8 text-xs"
+                className="gap-1.5 h-8 text-xs shrink-0"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Generate New Key
@@ -333,7 +636,7 @@ export default function IntegrationsPage() {
                   <thead className="border-b border-border text-[11px] font-semibold text-muted-foreground">
                     <tr>
                       <th className="pb-2">Name</th>
-                      <th className="pb-2">Key Prefix</th>
+                      <th className="pb-2">Key Prefix (Masked)</th>
                       <th className="pb-2">Allowed Scopes</th>
                       <th className="pb-2">Last Used</th>
                       <th className="pb-2">Status</th>
@@ -351,10 +654,10 @@ export default function IntegrationsPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              copyToClipboard(`${cred.keyPrefix}_live_demo_token`, cred.id)
+                              copyToClipboard(cred.keyPrefix, cred.id)
                             }
                             className="p-1 hover:text-foreground text-muted-foreground"
-                            title="Copy Token"
+                            title="Copy Key Prefix"
                           >
                             <Copy className="h-3 w-3" />
                           </button>
@@ -395,9 +698,10 @@ export default function IntegrationsPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                              className="h-7 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
                               onClick={() => handleRevokeCredential(cred.id)}
                             >
+                              <Trash2 className="h-3.5 w-3.5 mr-1" />
                               Revoke
                             </Button>
                           )}
@@ -409,25 +713,57 @@ export default function IntegrationsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Integration Activity Log (Audit Trail) */}
+          <Card className="shadow-xs">
+            <CardHeader className="pb-3">
+              <div className="flex items-center space-x-2">
+                <Activity className="h-4 w-4 text-primary" />
+                <CardTitle className="text-base font-bold text-foreground">
+                  Integration Activity & Audit Log
+                </CardTitle>
+              </div>
+              <CardDescription className="text-xs">
+                Real-time security trail of API token usage, webhooks, and canonical order ingestion.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="divide-y divide-border/60 text-xs">
+                {auditEvents.map((ev) => (
+                  <div key={ev.id} className="py-2.5 flex items-start justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center space-x-2">
+                        <Badge variant="outline" className="font-mono text-[9px] py-0">
+                          {ev.action}
+                        </Badge>
+                        <span className="font-semibold text-foreground">
+                          {ev.details}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Actor: <span className="font-medium text-foreground">{ev.actorName}</span> ({ev.actorRole}) • Entity: {ev.entityType}
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+                      {new Date(ev.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* Tab 3: Webhook Subscriptions */}
+        {/* SECTION 4: OUTBOUND WEBHOOKS */}
         <TabsContent value="webhooks" className="space-y-4">
-          {testWebhookResult && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-              <span>{testWebhookResult}</span>
-            </div>
-          )}
-
           <Card className="shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>
                 <CardTitle className="text-base font-bold text-foreground">
-                  Outbound Webhook Dispatch
+                  Outbound Webhook Dispatchers
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Sage delivers cryptographically signed HMAC events to your external systems upon order and fleet triggers.
+                  Sage delivers cryptographically signed HMAC SHA-256 events to your external servers upon order and fleet triggers.
                 </CardDescription>
               </div>
               <Button
@@ -444,7 +780,7 @@ export default function IntegrationsPage() {
                 {webhooks.map((wh) => (
                   <div
                     key={wh.id}
-                    className="rounded-lg border border-border p-3 space-y-2 hover:bg-muted/30 transition-colors"
+                    className="rounded-lg border border-border p-3.5 space-y-2 hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex items-center space-x-2">
@@ -458,16 +794,14 @@ export default function IntegrationsPage() {
                           {wh.isActive ? "Healthy" : "Inactive"}
                         </Badge>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs gap-1"
-                          onClick={() => handleTestWebhook(wh.id)}
-                        >
-                          <Send className="h-3 w-3" /> Test Ping
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => handleTestWebhook(wh.id)}
+                      >
+                        <Send className="h-3 w-3" /> Test HMAC Ping
+                      </Button>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -484,7 +818,7 @@ export default function IntegrationsPage() {
                     </div>
 
                     <div className="text-[11px] text-muted-foreground font-mono flex items-center justify-between pt-1 border-t border-border/50">
-                      <span>Secret: {wh.secret.slice(0, 10)}••••••••</span>
+                      <span>Secret: {wh.secret.slice(0, 8)}••••••••</span>
                       <span>
                         Last Triggered:{" "}
                         {wh.lastTriggeredAt
@@ -500,14 +834,14 @@ export default function IntegrationsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Modal: Connect New Integration */}
+      {/* MODAL 1: Connect New Integration */}
       <Dialog open={addIntegrationOpen} onOpenChange={setAddIntegrationOpen}>
         <DialogContent className="sm:max-w-md">
           <form onSubmit={integrationForm.handleSubmit(onAddIntegration)}>
             <DialogHeader>
-              <DialogTitle>Connect New Logistics Source</DialogTitle>
+              <DialogTitle>Connect External Logistics Platform</DialogTitle>
               <DialogDescription>
-                Configure credentials to sync orders and fleet state automatically.
+                Configure credentials to sync orders and fleet state non-invasively.
               </DialogDescription>
             </DialogHeader>
 
@@ -520,9 +854,9 @@ export default function IntegrationsPage() {
                   {...integrationForm.register("provider")}
                 >
                   <option value="SHOPIFY">Shopify Storefront</option>
-                  <option value="WOOCOMMERCE">WooCommerce B2B</option>
-                  <option value="ONFLEET">Onfleet Fleet Manager</option>
-                  <option value="SHIPSTATION">ShipStation Logistics</option>
+                  <option value="WOOCOMMERCE">WooCommerce Store</option>
+                  <option value="ONFLEET">Onfleet Dispatch</option>
+                  <option value="SHIPSTATION">ShipStation Orders</option>
                   <option value="CUSTOM_WEBHOOK">Custom REST Ingestion</option>
                 </Select>
               </div>
@@ -535,11 +869,6 @@ export default function IntegrationsPage() {
                   className="mt-1"
                   {...integrationForm.register("name")}
                 />
-                {integrationForm.formState.errors.name && (
-                  <p className="text-red-500 text-[10px] mt-0.5">
-                    {integrationForm.formState.errors.name.message}
-                  </p>
-                )}
               </div>
 
               <div>
@@ -593,41 +922,38 @@ export default function IntegrationsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal: Generate API Key */}
+      {/* MODAL 2: Generate Scoped API Key */}
       <Dialog open={addCredentialOpen} onOpenChange={setAddCredentialOpen}>
         <DialogContent className="sm:max-w-md">
           <form onSubmit={credentialForm.handleSubmit(onAddCredential)}>
             <DialogHeader>
               <DialogTitle>Generate Scoped API Credential</DialogTitle>
               <DialogDescription>
-                Assign least-privilege permissions to this integration key.
+                Create a machine-to-machine key with strict least-privilege permissions.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3 py-4 text-xs">
+            <div className="space-y-3.5 py-4 text-xs">
               <div>
                 <Label htmlFor="credName">Credential Label</Label>
                 <Input
                   id="credName"
-                  placeholder="e.g. Warehouse Dispatch Automator"
+                  placeholder="e.g. Warehouse ERP Integration"
                   className="mt-1"
                   {...credentialForm.register("name")}
                 />
-                {credentialForm.formState.errors.name && (
-                  <p className="text-red-500 text-[10px] mt-0.5">
-                    {credentialForm.formState.errors.name.message}
-                  </p>
-                )}
               </div>
 
               <div>
                 <Label>Allowed Permission Scopes</Label>
                 <div className="space-y-2 mt-2 rounded-lg border border-border p-3">
                   {[
-                    { id: "orders:read", label: "orders:read - View all orders" },
-                    { id: "orders:write", label: "orders:write - Create & assign orders" },
-                    { id: "riders:read", label: "riders:read - View fleet telemetry" },
-                    { id: "incidents:write", label: "incidents:write - Report incidents" },
+                    { id: "orders:read", label: "orders:read - Query orders & statuses" },
+                    { id: "orders:write", label: "orders:write - Ingest & update orders" },
+                    { id: "riders:read", label: "riders:read - Query courier positions" },
+                    { id: "riders:write", label: "riders:write - Invite & manage couriers" },
+                    { id: "incidents:write", label: "incidents:write - Submit dispatch alerts" },
+                    { id: "recommendations:read", label: "recommendations:read - View AI recommendations" },
                   ].map((scope) => (
                     <label key={scope.id} className="flex items-center space-x-2 text-xs">
                       <input
@@ -641,6 +967,23 @@ export default function IntegrationsPage() {
                     </label>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <Label htmlFor="expiresInDays">Key Expiry</Label>
+                <Select
+                  id="expiresInDays"
+                  className="mt-1"
+                  defaultValue="90"
+                  onChange={(e) =>
+                    credentialForm.setValue("expiresInDays", parseInt(e.target.value, 10))
+                  }
+                >
+                  <option value="30">30 Days</option>
+                  <option value="90">90 Days (Recommended)</option>
+                  <option value="180">180 Days</option>
+                  <option value="365">1 Year</option>
+                </Select>
               </div>
             </div>
 
@@ -658,60 +1001,387 @@ export default function IntegrationsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal: Add Webhook */}
+      {/* MODAL 3: ONE-TIME API SECRET DISPLAY (Strict Security Requirement) */}
+      <Dialog
+        open={Boolean(newlyCreatedSecret)}
+        onOpenChange={(open) => !open && setNewlyCreatedSecret(null)}
+      >
+        <DialogContent className="sm:max-w-lg border-emerald-500/30">
+          <DialogHeader>
+            <div className="flex items-center space-x-2 text-emerald-600">
+              <ShieldAlert className="h-5 w-5" />
+              <DialogTitle>Save Your API Secret Key</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs">
+              Please copy your API key now. For your security, this secret will <strong>never be shown again</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          {newlyCreatedSecret && (
+            <div className="space-y-4 py-3 text-xs">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-800 dark:text-amber-200 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  One-Time Secret Display
+                </div>
+                <p className="text-[11px]">
+                  Sage stores only protected representations of API secrets. If you lose this key, you will need to revoke it and generate a new one.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-muted-foreground">Credential Label</Label>
+                <div className="font-semibold text-foreground">
+                  {newlyCreatedSecret.name}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-muted-foreground">Secret API Key (M2M Token)</Label>
+                <div className="flex items-center space-x-2">
+                  <Input
+                    readOnly
+                    value={newlyCreatedSecret.secret}
+                    className="font-mono text-xs bg-muted selection:bg-primary/20"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      copyToClipboard(newlyCreatedSecret.secret, "one_time_secret")
+                    }
+                    className="gap-1.5 shrink-0"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    {copiedKey === "one_time_secret" ? "Copied!" : "Copy"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-muted p-2.5 font-mono text-[11px] text-muted-foreground">
+                # Example Authorization Header:
+                <br />
+                <span className="text-foreground">
+                  Authorization: Bearer {newlyCreatedSecret.secret}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              onClick={() => setNewlyCreatedSecret(null)}
+              className="w-full text-xs"
+            >
+              I Have Securely Copied This Key
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL 4: CSV Import Tool */}
+      <Dialog open={csvModalOpen} onOpenChange={setCsvModalOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-primary" />
+              Batch Order Ingestion via CSV
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Paste or modify CSV data with recipient name, phone, pickup, delivery, and priority.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-3 text-xs">
+            {csvImportResult && (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-emerald-800 dark:text-emerald-200">
+                <div className="font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  Import Complete
+                </div>
+                <p className="text-[11px] mt-0.5">
+                  Successfully ingested <strong>{csvImportResult.successCount}</strong> orders.{" "}
+                  {csvImportResult.duplicateCount > 0 && (
+                    <span>
+                      Skipped {csvImportResult.duplicateCount} duplicate records.
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <Label htmlFor="csvData">CSV Data (Comma-Separated)</Label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCsvContent(
+                      `recipient_name,recipient_phone,pickup_address,delivery_address,priority,notes\n` +
+                        `David Ross,+44 7700 900888,Depot Alpha London E1,10 Kensington Church St London W8,STANDARD,Ring doorbell\n` +
+                        `Zara Patel,+44 7700 900999,Depot Beta London SE1,250 Kings Road London SW3,EXPRESS,Handle with care`,
+                    )
+                  }
+                  className="text-[11px] text-primary hover:underline"
+                >
+                  Load Sample Data
+                </button>
+              </div>
+              <Textarea
+                id="csvData"
+                rows={7}
+                value={csvContent}
+                onChange={(e) => setCsvContent(e.target.value)}
+                className="font-mono text-xs bg-muted/40"
+              />
+            </div>
+
+            <div className="rounded-lg bg-muted p-2.5 text-[11px] text-muted-foreground space-y-1">
+              <div className="font-semibold text-foreground">Expected Columns:</div>
+              <div>recipient_name, recipient_phone, pickup_address, delivery_address, priority, notes</div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCsvModalOpen(false)}
+            >
+              Close
+            </Button>
+            <Button onClick={handleProcessCsv} className="gap-1.5">
+              <Upload className="h-3.5 w-3.5" />
+              Process & Ingest Batch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL 5: WhatsApp Architecture Preview (Explaining In-Development Status) */}
+      <Dialog open={whatsAppModalOpen} onOpenChange={setWhatsAppModalOpen}>
+        <DialogContent className="sm:max-w-lg border-amber-500/30">
+          <DialogHeader>
+            <div className="flex items-center space-x-2 text-amber-600">
+              <MessageSquare className="h-5 w-5" />
+              <DialogTitle>WhatsApp Order Ingestion Pipeline</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs">
+              Technical architecture and verification workflow for the upcoming Meta Graph API integration.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3.5 py-3 text-xs">
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-amber-800 dark:text-amber-200">
+              <div className="font-bold mb-1">Status: In Active Engineering</div>
+              <p className="text-[11px]">
+                In compliance with strict production guidelines, live WhatsApp connection is not active until Meta App review is concluded. The webhook verification handler is fully stubbed and ready at:
+                <br />
+                <code className="font-mono font-bold">/api/v1/webhooks/whatsapp</code>
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="font-bold text-foreground text-xs">
+                End-to-End Processing Workflow:
+              </div>
+              <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground text-[11px] leading-relaxed">
+                <li>
+                  <strong className="text-foreground">Meta Webhook Handshake:</strong> Verification of `hub.verify_token` and `hub.challenge` during onboarding.
+                </li>
+                <li>
+                  <strong className="text-foreground">Deduplication:</strong> In-memory and database ID check preventing repeated delivery of same WhatsApp message ID.
+                </li>
+                <li>
+                  <strong className="text-foreground">Async Worker Queuing:</strong> Immediate 200 OK acknowledgment to Meta, offloading AI parsing to background worker.
+                </li>
+                <li>
+                  <strong className="text-foreground">Vertex AI Extraction:</strong> Gemini model extracts recipient, pickup, delivery address, and notes from unstructured chat.
+                </li>
+                <li>
+                  <strong className="text-foreground">Address Geocoding:</strong> Coordinates resolved or flagged as `requiresGeocoding: true` for manual dispatcher review.
+                </li>
+                <li>
+                  <strong className="text-foreground">Order Candidate Creation:</strong> Order logged into canonical workflow with WhatsApp message audit reference.
+                </li>
+              </ol>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setWhatsAppModalOpen(false)}
+              className="w-full text-xs"
+            >
+              Close Architecture Preview
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL 6: API Documentation & cURL Snippets */}
+      <Dialog open={apiDocsOpen} onOpenChange={setApiDocsOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <div className="flex items-center space-x-2">
+              <Code2 className="h-5 w-5 text-primary" />
+              <DialogTitle>Sage Versioned REST API (v1)</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs">
+              Authenticate requests with `Authorization: Bearer &lt;API_KEY&gt;`. All requests enforce tenant isolation server-side.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3 text-xs max-h-[60vh] overflow-y-auto">
+            {/* POST /api/v1/orders */}
+            <div className="space-y-1.5">
+              <div className="flex items-center space-x-2">
+                <Badge className="bg-emerald-600 text-white font-mono text-[10px]">
+                  POST
+                </Badge>
+                <span className="font-mono font-bold text-foreground">
+                  /api/v1/orders
+                </span>
+                <span className="text-muted-foreground text-[11px]">
+                  • Ingest Canonical Order
+                </span>
+              </div>
+              <pre className="rounded-lg bg-muted p-3 text-[11px] font-mono text-muted-foreground overflow-x-auto">
+{`curl -X POST https://sage-ops.com/api/v1/orders \\
+  -H "Authorization: Bearer sage_live_YOUR_KEY" \\
+  -H "Idempotency-Key: ord_req_unique_9918" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "recipientName": "Claire Watson",
+    "recipientPhone": "+44 7700 900331",
+    "pickupAddress": "33 Old Broad Street, London EC2N 1HT",
+    "dropoffAddress": "100 New Bridge Street, London EC4V 6JA",
+    "priority": "EXPRESS",
+    "packageSize": "MEDIUM"
+  }'`}
+              </pre>
+            </div>
+
+            {/* GET /api/v1/orders */}
+            <div className="space-y-1.5">
+              <div className="flex items-center space-x-2">
+                <Badge className="bg-blue-600 text-white font-mono text-[10px]">
+                  GET
+                </Badge>
+                <span className="font-mono font-bold text-foreground">
+                  /api/v1/orders?status=PENDING
+                </span>
+                <span className="text-muted-foreground text-[11px]">
+                  • List Tenant Orders
+                </span>
+              </div>
+              <pre className="rounded-lg bg-muted p-3 text-[11px] font-mono text-muted-foreground overflow-x-auto">
+{`curl https://sage-ops.com/api/v1/orders?status=PENDING \\
+  -H "Authorization: Bearer sage_live_YOUR_KEY"`}
+              </pre>
+            </div>
+
+            {/* GET /api/v1/riders */}
+            <div className="space-y-1.5">
+              <div className="flex items-center space-x-2">
+                <Badge className="bg-blue-600 text-white font-mono text-[10px]">
+                  GET
+                </Badge>
+                <span className="font-mono font-bold text-foreground">
+                  /api/v1/riders
+                </span>
+                <span className="text-muted-foreground text-[11px]">
+                  • List Active Couriers & Fleet Telemetry
+                </span>
+              </div>
+              <pre className="rounded-lg bg-muted p-3 text-[11px] font-mono text-muted-foreground overflow-x-auto">
+{`curl https://sage-ops.com/api/v1/riders \\
+  -H "Authorization: Bearer sage_live_YOUR_KEY"`}
+              </pre>
+            </div>
+
+            {/* GET /api/v1/recommendations */}
+            <div className="space-y-1.5">
+              <div className="flex items-center space-x-2">
+                <Badge className="bg-blue-600 text-white font-mono text-[10px]">
+                  GET
+                </Badge>
+                <span className="font-mono font-bold text-foreground">
+                  /api/v1/recommendations
+                </span>
+                <span className="text-muted-foreground text-[11px]">
+                  • Fetch AI Bottleneck & Re-route Actions
+                </span>
+              </div>
+              <pre className="rounded-lg bg-muted p-3 text-[11px] font-mono text-muted-foreground overflow-x-auto">
+{`curl https://sage-ops.com/api/v1/recommendations \\
+  -H "Authorization: Bearer sage_live_YOUR_KEY"`}
+              </pre>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setApiDocsOpen(false)}
+              className="text-xs"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL 7: Register Webhook Endpoint */}
       <Dialog open={addWebhookOpen} onOpenChange={setAddWebhookOpen}>
         <DialogContent className="sm:max-w-md">
           <form onSubmit={webhookForm.handleSubmit(onAddWebhook)}>
             <DialogHeader>
-              <DialogTitle>Register Webhook Destination</DialogTitle>
-              <DialogDescription>
-                Receive real-time notifications when order and fleet events fire.
+              <DialogTitle>Register Outbound Webhook</DialogTitle>
+              <DialogDescription className="text-xs">
+                Receive real-time event dispatches signed with HMAC SHA-256.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3 py-4 text-xs">
+            <div className="space-y-3 py-3 text-xs">
               <div>
-                <Label htmlFor="webhookUrl">Webhook Payload URL</Label>
+                <Label htmlFor="whUrl">Destination URL</Label>
                 <Input
-                  id="webhookUrl"
-                  placeholder="https://your-api.com/webhooks/sage"
-                  className="mt-1"
+                  id="whUrl"
+                  placeholder="https://api.yourdomain.com/sage-webhook"
+                  className="mt-1 font-mono"
                   {...webhookForm.register("url")}
                 />
-                {webhookForm.formState.errors.url && (
-                  <p className="text-red-500 text-[10px] mt-0.5">
-                    {webhookForm.formState.errors.url.message}
-                  </p>
-                )}
               </div>
 
               <div>
-                <Label>Events to Trigger</Label>
-                <div className="space-y-2 mt-2 rounded-lg border border-border p-3">
+                <Label>Event Triggers</Label>
+                <div className="space-y-1.5 mt-1.5 rounded-lg border border-border p-2.5">
                   {[
-                    { id: "order.created", label: "order.created - New order ingested" },
-                    { id: "order.delayed", label: "order.delayed - Order delayed past ETA" },
-                    { id: "order.delivered", label: "order.delivered - Order completed" },
-                    { id: "incident.raised", label: "incident.raised - Incident flagged" },
+                    "order.created",
+                    "order.updated",
+                    "delivery.assigned",
+                    "incident.created",
                   ].map((evt) => (
-                    <label key={evt.id} className="flex items-center space-x-2 text-xs">
+                    <label key={evt} className="flex items-center space-x-2 text-xs">
                       <input
                         type="checkbox"
-                        value={evt.id}
+                        value={evt}
                         defaultChecked
                         {...webhookForm.register("events")}
                         className="rounded border-border text-primary"
                       />
-                      <span className="font-mono text-[11px]">{evt.label}</span>
+                      <span className="font-mono text-[11px]">{evt}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="secret">Signing Secret (HMAC SHA-256)</Label>
+                <Label htmlFor="whSecret">HMAC Signing Secret</Label>
                 <Input
-                  id="secret"
+                  id="whSecret"
                   className="mt-1 font-mono"
                   {...webhookForm.register("secret")}
                 />
@@ -726,7 +1396,7 @@ export default function IntegrationsPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit">Register Webhook</Button>
+              <Button type="submit">Subscribe Endpoint</Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -71,12 +71,12 @@ export default function RidersPage() {
   });
 
   const onInviteRider = (data: InviteRiderInput) => {
-    const created = sageRepo.inviteRider(orgId, data);
+    const { invitation, rawInviteUrl } = sageRepo.createRiderInvitation(orgId, data);
     setInviteRiderOpen(false);
     inviteForm.reset();
-    setSuccessNotice(`Invitation sent to ${created.name} (${created.email}).`);
+    setSuccessNotice(`Invitation created for ${invitation.name} (${invitation.phone}). Share link: ${rawInviteUrl}`);
     loadData();
-    setTimeout(() => setSuccessNotice(null), 4000);
+    setTimeout(() => setSuccessNotice(null), 8000);
   };
 
   const handleStatusChange = (riderId: string, newStatus: RiderStatus) => {
@@ -103,7 +103,7 @@ export default function RidersPage() {
       searchQuery === "" ||
       r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.phone.includes(searchQuery) ||
-      r.email.toLowerCase().includes(searchQuery.toLowerCase());
+      Boolean(r.email?.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesStatus && matchesSearch;
   });
 
