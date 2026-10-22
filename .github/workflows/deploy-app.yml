@@ -20,15 +20,12 @@ jobs:
       contents: read
       packages: write
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'dev' }}
+    env:
+      IMAGE: ghcr.io/sagestic/sage-${{ inputs.app }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set lowercased image name
-        run: |
-          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE=ghcr.io/${OWNER_LOWER}/sage-${{ inputs.app }}" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
