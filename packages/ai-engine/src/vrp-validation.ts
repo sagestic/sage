@@ -20,6 +20,8 @@ export function validateVrpSolution(problem: VrpProblemRequest, raw: unknown): V
     return empty();
   }
   const solution = raw as Partial<VrpSolution>;
+  if (solution.status === "ERROR" || solution.status === "INFEASIBLE")
+    errors.push(`Solver returned non-dispatchable status: ${solution.status}`);
   if (!["OPTIMAL", "FEASIBLE", "INFEASIBLE", "ERROR"].includes(String(solution.status)))
     errors.push("Invalid solver status");
   if (!Array.isArray(solution.routes) || !Array.isArray(solution.unassignedOrderIds)) {
@@ -28,6 +30,9 @@ export function validateVrpSolution(problem: VrpProblemRequest, raw: unknown): V
   }
   const vehicles = new Map(problem.vehicles.map(v => [v.id, v]));
   const orders = new Map(problem.deliveries.map(d => [d.id, d]));
+  if (problem.vehicles.some(v => !Number.isFinite(v.capacity) || v.capacity <= 0) ||
+      problem.deliveries.some(d => d.weightKg !== undefined && (!Number.isFinite(d.weightKg) || d.weightKg <= 0)))
+    errors.push("Invalid vehicle capacity or delivery weight");
   if (vehicles.size !== problem.vehicles.length || orders.size !== problem.deliveries.length)
     errors.push("Duplicate vehicle or order IDs in problem");
   const pickups = new Set<string>(), dropoffs = new Set<string>(), usedVehicles = new Set<string>();
