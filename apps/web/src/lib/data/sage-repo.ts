@@ -889,6 +889,95 @@ class SageDataStore {
     return true;
   }
 
+  // Autonomous Fleet Auto-Dispatch (Matches pending orders to available riders)
+  autoDispatchPendingOrders(orgId: string): {
+    assignedCount: number;
+    unassignedCount: number;
+    matches: Array<{ orderNumber: string; riderName: string }>;
+  } {
+    const pendingOrders = this.orders.filter(
+      (o) => o.organizationId === orgId && o.status === "PENDING",
+    );
+    const availableRiders = this.riders.filter(
+      (r) =>
+        r.organizationId === orgId &&
+        (r.status === "AVAILABLE" || (r.status === "BUSY" && r.activeOrderCount < 3)),
+    );
+
+    const matches: Array<{ orderNumber: string; riderName: string }> = [];
+
+    if (availableRiders.length === 0 || pendingOrders.length === 0) {
+      return {
+        assignedCount: 0,
+        unassignedCount: pendingOrders.length,
+        matches: [],
+      };
+    }
+
+    let riderIndex = 0;
+    for (const order of pendingOrders) {
+      if (availableRiders.length === 0) break;
+      const rider = availableRiders[riderIndex % availableRiders.length];
+
+      this.assignRider(orgId, order.id, rider.id);
+      matches.push({
+        orderNumber: order.orderNumber,
+        riderName: rider.name,
+      });
+
+      riderIndex++;
+    }
+
+    this.logAudit(
+      orgId,
+      "Autonomous Dispatch Engine",
+      "SYSTEM",
+      "AUTONOMOUS_FLEET_DISPATCH",
+      "DISPATCH_BATCH",
+      `batch_${Date.now()}`,
+      `Autonomously dispatched ${matches.length} orders across ${availableRiders.length} available couriers.`,
+    );
+
+    return {
+      assignedCount: matches.length,
+      unassignedCount: pendingOrders.length - matches.length,
+      matches,
+    };
+  }
+
+  // Public Tracking Query (for customer WhatsApp tracking links)
+  getPublicTrackingOrder(orderId: string): {
+    order: OrderItem;
+    courier?: {
+      name: string;
+      phone: string;
+      vehicleType: VehicleType;
+      latitude?: number;
+      longitude?: number;
+      batteryLevel: number;
+    };
+  } | undefined {
+    const order = this.orders.find((o) => o.id === orderId || o.orderNumber === orderId);
+    if (!order) return undefined;
+
+    let courier = undefined;
+    if (order.assignedRiderId) {
+      const rider = this.riders.find((r) => r.id === order.assignedRiderId);
+      if (rider) {
+        courier = {
+          name: rider.name,
+          phone: rider.phone,
+          vehicleType: rider.vehicleType,
+          latitude: rider.currentLatitude,
+          longitude: rider.currentLongitude,
+          batteryLevel: rider.batteryLevel,
+        };
+      }
+    }
+
+    return { order, courier };
+  }
+
   // Riders
   getRiders(orgId: string, statusFilter?: string): RiderItem[] {
     return this.riders.filter(

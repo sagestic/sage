@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Phone,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import {
   Avatar,
@@ -65,6 +66,19 @@ export default function LiveOperationsPage() {
     setTimeout(() => setActionNotice(null), 4000);
   };
 
+  const handleAutoDispatch = () => {
+    const res = sageRepo.autoDispatchPendingOrders(orgId);
+    if (res.assignedCount === 0) {
+      setActionNotice("No pending orders or no available couriers with capacity.");
+    } else {
+      setActionNotice(
+        `Autonomous Dispatch: Assigned ${res.assignedCount} pending orders across fleet!`,
+      );
+    }
+    loadData();
+    setTimeout(() => setActionNotice(null), 5000);
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Title & Live Pulse */}
@@ -85,6 +99,13 @@ export default function LiveOperationsPage() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <Button
+            size="sm"
+            onClick={handleAutoDispatch}
+            className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+          >
+            <Zap className="h-3.5 w-3.5 fill-white" /> Auto-Dispatch Fleet
+          </Button>
           <Link href="/dashboard/recommendations">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs border-primary/30 text-primary">
               <Sparkles className="h-3.5 w-3.5" /> Run AI Optimizer

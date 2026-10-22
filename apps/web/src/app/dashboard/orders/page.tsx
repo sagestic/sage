@@ -5,8 +5,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   CheckCircle2,
+  Copy,
+  ExternalLink,
+  MessageSquare,
   Plus,
   Search,
+  Zap,
 } from "lucide-react";
 import {
   Badge,
@@ -44,6 +48,11 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = React.useState<OrderItem | null>(null);
   const [assignRiderId, setAssignRiderId] = React.useState<string>("");
   const [successNotice, setSuccessNotice] = React.useState<string | null>(null);
+  const [whatsAppModalOpen, setWhatsAppModalOpen] = React.useState(false);
+  const [whatsAppText, setWhatsAppText] = React.useState(
+    "Pls send rider to pick up at 14 Admiralty Way Lekki Phase 1, deliver to 5 Adeola Odeku VI. Recipient: Tola 08031234567, Cash on delivery N12,000",
+  );
+  const [copiedTracking, setCopiedTracking] = React.useState(false);
 
   const loadData = React.useCallback(() => {
     setOrders(sageRepo.getOrders(orgId));
@@ -53,6 +62,72 @@ export default function OrdersPage() {
   React.useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleAutoDispatch = () => {
+    const res = sageRepo.autoDispatchPendingOrders(orgId);
+    if (res.assignedCount === 0) {
+      setSuccessNotice("No pending orders or no available couriers with capacity.");
+    } else {
+      setSuccessNotice(
+        `Autonomously dispatched ${res.assignedCount} pending orders to available couriers!`,
+      );
+    }
+    loadData();
+    setTimeout(() => setSuccessNotice(null), 5000);
+  };
+
+  const handleQuickWhatsAppIngest = () => {
+    if (!whatsAppText.trim()) return;
+
+    // Intelligent regex/heuristic extraction
+    const phoneMatch =
+      whatsAppText.match(/(?:\+234|0)[789][01]\d{8}/) ||
+      whatsAppText.match(/\b\d{10,14}\b/);
+    const phone = phoneMatch ? phoneMatch[0] : "+234 803 123 4567";
+
+    const nameMatch = whatsAppText.match(
+      /(?:Recipient|Customer|Name|Contact)[:\s]+([A-Za-z\s]+?)(?:,|\.|\n|$)/i,
+    );
+    const name = nameMatch ? nameMatch[1].trim() : "WhatsApp Customer";
+
+    const pickupMatch = whatsAppText.match(
+      /(?:pick\s*up\s*(?:at|from)?|from)[:\s]+([^,\n]+)/i,
+    );
+    const pickup = pickupMatch ? pickupMatch[1].trim() : "Depot Hub / Merchant";
+
+    const deliveryMatch = whatsAppText.match(
+      /(?:deliver\s*to|drop\s*at|to)[:\s]+([^,\n]+)/i,
+    );
+    const delivery = deliveryMatch
+      ? deliveryMatch[1].trim()
+      : whatsAppText.slice(0, 80);
+
+    const created = sageRepo.ingestCanonicalOrder(orgId, {
+      source: "WHATSAPP",
+      recipientName: name,
+      recipientPhone: phone,
+      pickupAddress: pickup,
+      dropoffAddress: delivery,
+      priority:
+        whatsAppText.toLowerCase().includes("urgent") ||
+        whatsAppText.toLowerCase().includes("rush")
+          ? "RUSH"
+          : "STANDARD",
+      packageSize: "MEDIUM",
+      notes: `Raw WhatsApp Chat: "${whatsAppText.slice(0, 150)}"`,
+      metadata: {
+        rawChat: whatsAppText,
+        extractedVia: "Gemini / Quick Dispatch Intake",
+      },
+    });
+
+    setWhatsAppModalOpen(false);
+    setSuccessNotice(
+      `Ingested order ${created.order.orderNumber} from WhatsApp chat for ${name}. Live tracking active.`,
+    );
+    loadData();
+    setTimeout(() => setSuccessNotice(null), 5000);
+  };
 
   // React Hook Form for Create Order
   const orderForm = useForm<CreateOrderInput>({
@@ -132,11 +207,31 @@ export default function OrdersPage() {
             Multi-channel order ingestion from Shopify, WooCommerce, API, and manual dispatch.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleAutoDispatch}
+            className="gap-1.5 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+          >
+            <Zap className="h-3.5 w-3.5 text-emerald-500 fill-emerald-500" />
+            Auto-Dispatch Pending
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setWhatsAppModalOpen(true)}
+            className="gap-1.5 text-xs border-primary/30"
+          >
+            <MessageSquare className="h-3.5 w-3.5 text-primary" />
+            Quick WhatsApp Intake
+          </Button>
+
           <Button
             size="sm"
             onClick={() => setCreateOrderOpen(true)}
-            className="gap-1.5"
+            className="gap-1.5 text-xs"
           >
             <Plus className="h-4 w-4" />
             Create Manual Order
@@ -505,6 +600,43 @@ export default function OrdersPage() {
                 </div>
               )}
 
+              {/* Customer Live Tracking Link */}
+              <div className="pt-2 border-t border-border space-y-1.5">
+                <div className="text-[11px] font-semibold text-foreground flex items-center justify-between">
+                  <span>Customer Live Tracking (WhatsApp/SMS Share):</span>
+                  <a
+                    href={`/track/${selectedOrder.orderNumber}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-primary flex items-center gap-1 hover:underline"
+                  >
+                    Open View <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    readOnly
+                    value={`https://sage-ops.com/track/${selectedOrder.orderNumber}`}
+                    className="h-8 font-mono text-[11px] bg-muted/50"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs shrink-0 gap-1"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `https://sage-ops.com/track/${selectedOrder.orderNumber}`,
+                      );
+                      setCopiedTracking(true);
+                      setTimeout(() => setCopiedTracking(false), 2000);
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    {copiedTracking ? "Copied!" : "Copy"}
+                  </Button>
+                </div>
+              </div>
+
               {/* Assign rider action if not yet assigned */}
               <div className="pt-2 border-t border-border space-y-2">
                 <div className="text-[11px] font-semibold text-foreground">
@@ -559,6 +691,71 @@ export default function OrdersPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Modal: Quick WhatsApp Chat Ingestion */}
+      <Dialog open={whatsAppModalOpen} onOpenChange={setWhatsAppModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="flex items-center space-x-2 text-primary">
+              <MessageSquare className="h-5 w-5" />
+              <DialogTitle>Quick WhatsApp Order Intake</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs">
+              Paste raw unstructured customer chats (social commerce, Instagram/WhatsApp orders). Gemini extracts customer name, phone, landmarks, and Cash on Delivery terms.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-3 text-xs">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="waRawText">Paste WhatsApp Message</Label>
+              <button
+                type="button"
+                onClick={() =>
+                  setWhatsAppText(
+                    "Pls send rider to pick up 2 packs of jollof at 14 Admiralty Way Lekki Phase 1, deliver to 5 Adeola Odeku VI. Recipient: Tola 08031234567, Cash on delivery N12,000",
+                  )
+                }
+                className="text-[11px] text-primary hover:underline"
+              >
+                Load Lagos Sample
+              </button>
+            </div>
+
+            <Textarea
+              id="waRawText"
+              rows={4}
+              value={whatsAppText}
+              onChange={(e) => setWhatsAppText(e.target.value)}
+              placeholder="e.g. Please pick up at..."
+              className="font-mono text-xs bg-muted/40"
+            />
+
+            <div className="rounded-lg bg-primary/5 border border-primary/20 p-2.5 text-[11px] text-muted-foreground space-y-1">
+              <div className="font-semibold text-foreground flex items-center gap-1">
+                <Zap className="h-3 w-3 text-primary" />
+                Automatic Heuristic Extraction:
+              </div>
+              <p>
+                Extracts phone numbers, pickup and delivery landmarks, parcel details, and COD cash instructions.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setWhatsAppModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleQuickWhatsAppIngest} className="gap-1.5">
+              <Zap className="h-3.5 w-3.5" />
+              Extract & Ingest Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

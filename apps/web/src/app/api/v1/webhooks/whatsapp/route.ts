@@ -75,9 +75,16 @@ export async function POST(req: NextRequest) {
 
             receivedCount++;
 
-            // Extract sender and message text
+            // Extract sender and message text / location
             const senderPhone = msg.from;
-            const messageText = msg.text?.body || "";
+            const messageText = msg.text?.body || (msg.location ? "GPS Pin Shared via WhatsApp" : "");
+            const hasLocation = Boolean(msg.location);
+            const dropoffCoords = hasLocation
+              ? {
+                  latitude: msg.location.latitude,
+                  longitude: msg.location.longitude,
+                }
+              : undefined;
 
             // Log event to active default tenant
             sageRepo.ingestCanonicalOrder("org_apex_logistics", {
@@ -85,17 +92,24 @@ export async function POST(req: NextRequest) {
               externalOrderId: messageId,
               recipientName: `WhatsApp Contact (${senderPhone.slice(-4)})`,
               recipientPhone: senderPhone,
-              pickupAddress: "Pending Extraction / Depot Default",
-              dropoffAddress: messageText.slice(0, 100) || "Address pending extraction",
+              pickupAddress: "Main Hub Depot",
+              dropoffAddress: hasLocation
+                ? `GPS Coordinates (${msg.location.latitude.toFixed(4)}, ${msg.location.longitude.toFixed(4)})`
+                : messageText.slice(0, 100) || "Address pending clarification",
+              dropoffCoordinates: dropoffCoords,
               priority: "STANDARD",
               packageSize: "MEDIUM",
-              notes: `Ingested from WhatsApp message: "${messageText}"`,
+              notes: `Ingested from WhatsApp: "${messageText}"`,
               metadata: {
                 whatsappMessageId: messageId,
                 rawSender: senderPhone,
-                status: "CANDIDATE_REQUIRES_CLARIFICATION",
+                status: hasLocation ? "CONFIRMED" : "CANDIDATE_REQUIRES_CLARIFICATION",
+                customerTrackingUrl: `/track/${messageId}`,
               },
             });
+
+            // If auto-dispatch is enabled, try matching immediately
+            sageRepo.autoDispatchPendingOrders("org_apex_logistics");
           }
         }
       }
