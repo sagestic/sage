@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sageRepo } from "../../../../../lib/data/sage-repo";
+import { whatsAppAssistant } from "../../../../../lib/communication/whatsapp-assistant";
 
 // In-memory message deduplication set
 const processedMessageIds = new Set<string>();
@@ -79,7 +80,23 @@ export async function POST(req: NextRequest) {
             const senderPhone = msg.from;
             const rawText = msg.text?.body || "";
 
-            // Robust NLP/Regex Extraction for Unstructured WhatsApp Orders
+            // Process incoming message with Sage WhatsApp Assistant
+            const assistantReply = await whatsAppAssistant.processInboundMessage(
+              senderPhone,
+              rawText,
+              "org_apex_logistics",
+            );
+
+            // If customer was asking for live tracking, ETA, or Paystack payment link
+            if (assistantReply.action === "TRACKING_INFO" || assistantReply.action === "PAYMENT_LINK") {
+              // Log simulated or outbound WhatsApp transmission
+              console.log(
+                `[WhatsApp Cloud API Outbound] -> To ${senderPhone}:\n${assistantReply.body}`,
+              );
+              continue;
+            }
+
+            // Otherwise, treat as new unstructured delivery booking
             const phoneMatch =
               rawText.match(/(?:\+234|0)[789][01]\d{8}/) ||
               rawText.match(/\b\d{10,14}\b/);
@@ -121,11 +138,13 @@ export async function POST(req: NextRequest) {
             );
 
             const isConfirmed = hasLandmarkCue || dropoffAddress.length > 15;
+            const newOrderNumber = `SG-${Math.floor(1000 + Math.random() * 9000)}`;
+            const paystackLink = `https://checkout.paystack.com/simulate_${newOrderNumber}?amount=4500`;
 
             // Ingest canonical order into Sage
             sageRepo.ingestCanonicalOrder("org_apex_logistics", {
               source: "WHATSAPP",
-              externalOrderId: messageId,
+              externalOrderId: newOrderNumber,
               recipientName,
               recipientPhone,
               pickupAddress,
@@ -143,15 +162,18 @@ export async function POST(req: NextRequest) {
                 status: isConfirmed
                   ? "CONFIRMED"
                   : "CANDIDATE_REQUIRES_CLARIFICATION",
-                customerTrackingUrl: `/track/${messageId}`,
+                customerTrackingUrl: `/track/${newOrderNumber}`,
+                paystackUrl: paystackLink,
+                deliveryFeeNgn: 4500,
+                paymentStatus: "PENDING",
                 requiresGeocoding: true,
                 autoResponseSuggested: isConfirmed
-                  ? `Booking confirmed! We are matching a courier. Track live: https://sage-ops.com/track/${messageId}`
+                  ? `Booking confirmed (Order ${newOrderNumber})! Delivery Fee: ₦4,500. Pay online via Paystack: ${paystackLink} or pay upon arrival. Track courier live: https://sage-ops.com/track/${newOrderNumber}`
                   : "We received your delivery request! Please provide the street name or closest landmark for delivery.",
               },
             });
 
-            // If confirmed, trigger autonomous dispatch immediately
+            // If confirmed, trigger autonomous corridor dispatch immediately
             if (isConfirmed) {
               sageRepo.autoDispatchPendingOrders("org_apex_logistics");
             }

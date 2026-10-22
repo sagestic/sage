@@ -56,6 +56,12 @@ export interface OrderItem {
   handoverFromRiderName?: string;
   rendezvousPoint?: { name: string; lat: number; lng: number };
   estimatedKmSaved?: number;
+  paymentStatus?: "UNPAID" | "PENDING" | "PAID" | "REFUNDED" | "EXEMPT";
+  paymentAmount?: number;
+  paymentCurrency?: string;
+  paystackReference?: string;
+  paystackPaymentUrl?: string;
+  paidAt?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -369,11 +375,16 @@ class SageDataStore {
         status: "IN_TRANSIT",
         priority: "RUSH",
         packageSize: "SMALL",
+        paymentStatus: "PENDING",
+        paymentAmount: 4500,
+        paymentCurrency: "NGN",
+        paystackReference: "sage_ORD-9421_ref",
+        paystackPaymentUrl: "https://checkout.paystack.com/simulate_ORD-9421",
         assignedRiderId: "rdr_apex_1",
         assignedRiderName: "Marcus Thorne",
         assignedRiderVehicle: "MOTORCYCLE",
         estimatedDeliveryAt: new Date(Date.now() + 18 * 60000).toISOString(),
-        notes: "Express medical supply. Direct handover to receptionist.",
+        notes: "Express parcel. Require payment verification before parcel release.",
         createdAt: new Date(Date.now() - 42 * 60000).toISOString(),
         updatedAt: new Date().toISOString(),
       },
@@ -395,6 +406,11 @@ class SageDataStore {
         status: "ASSIGNED",
         priority: "STANDARD",
         packageSize: "MEDIUM",
+        paymentStatus: "PAID",
+        paymentAmount: 7500,
+        paymentCurrency: "NGN",
+        paystackReference: "sage_ORD-9422_paid",
+        paidAt: new Date(Date.now() - 45 * 60000).toISOString(),
         assignedRiderId: "rdr_apex_3",
         assignedRiderName: "Lucas Meyer",
         assignedRiderVehicle: "VAN",
@@ -537,6 +553,18 @@ class SageDataStore {
         lastSyncAt: new Date(Date.now() - 120 * 60000).toISOString(),
         lastSyncStatus: "IDLE (Ready for file drop)",
         syncIntervalMinutes: 60,
+      },
+      {
+        id: "int_apex_paystack",
+        organizationId: orgApex,
+        provider: "CUSTOM_WEBHOOK",
+        name: "Paystack Payment Gateway",
+        status: "ACTIVE",
+        orderCount: 154,
+        lastSyncAt: new Date(Date.now() - 5 * 60000).toISOString(),
+        lastSyncStatus: "LISTENING (/api/v1/webhooks/paystack - charge.success)",
+        syncIntervalMinutes: 1,
+        endpointUrl: "/api/v1/webhooks/paystack",
       },
     );
 
@@ -1176,6 +1204,77 @@ class SageDataStore {
     }
 
     return { order, courier };
+  }
+
+  // Payment Verification & Processing (Paystack Integration)
+  markOrderPaid(
+    orgId: string,
+    orderIdOrNumber: string,
+    amount: number,
+    reference: string,
+    method: "PAYSTACK" | "CASH" = "PAYSTACK",
+  ): boolean {
+    const order = this.orders.find(
+      (o) =>
+        (o.organizationId === orgId || !orgId) &&
+        (o.id === orderIdOrNumber || o.orderNumber === orderIdOrNumber),
+    );
+    if (!order) return false;
+
+    order.paymentStatus = "PAID";
+    order.paymentAmount = amount || order.paymentAmount || 4500;
+    order.paystackReference = reference;
+    order.paidAt = new Date().toISOString();
+    order.updatedAt = new Date().toISOString();
+
+    const verifiedDetails = `Payment of ₦${order.paymentAmount.toLocaleString()} verified via ${method} (Ref: ${reference}). Courier cleared for package release.`;
+    order.notes = order.notes ? `${order.notes} | ${verifiedDetails}` : verifiedDetails;
+
+    this.logAudit(
+      order.organizationId,
+      "Paystack Payment Gateway",
+      "SYSTEM",
+      "PAYMENT_VERIFIED",
+      "ORDER",
+      order.id,
+      verifiedDetails,
+    );
+
+    this.dispatchWebhookEvent(order.organizationId, "delivery.status_updated", {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      paymentStatus: "PAID",
+      amountPaid: order.paymentAmount,
+      reference,
+    });
+
+    return true;
+  }
+
+  initializePaystackOrderPayment(
+    orgId: string,
+    orderIdOrNumber: string,
+    amountNgn?: number,
+  ): { authorizationUrl: string; reference: string; amount: number } {
+    const order = this.orders.find(
+      (o) =>
+        (o.organizationId === orgId || !orgId) &&
+        (o.id === orderIdOrNumber || o.orderNumber === orderIdOrNumber),
+    );
+    const amount = amountNgn || order?.paymentAmount || 4500;
+    const reference = `sage_${order?.orderNumber || "ORD"}_${Date.now()}`;
+    const authorizationUrl = `https://checkout.paystack.com/simulate_${reference}`;
+
+    if (order) {
+      order.paystackReference = reference;
+      order.paystackPaymentUrl = authorizationUrl;
+      order.paymentAmount = amount;
+      if (order.paymentStatus !== "PAID") {
+        order.paymentStatus = "PENDING";
+      }
+    }
+
+    return { authorizationUrl, reference, amount };
   }
 
   // Riders

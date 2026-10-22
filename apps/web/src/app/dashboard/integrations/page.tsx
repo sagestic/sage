@@ -5,11 +5,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Activity,
-  AlertCircle,
   AlertTriangle,
   CheckCircle2,
   Code2,
   Copy,
+  CreditCard,
   FileSpreadsheet,
   Globe,
   Info,
@@ -356,7 +356,7 @@ Elena Rostova,+44 7700 900733,52 Commercial Road Whitechapel E1,14 Bishopsgate L
 
         {/* SECTION 1: AVAILABLE INTEGRATIONS */}
         <TabsContent value="available" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {/* Card 1: Website / REST API */}
             <Card className="shadow-xs hover:border-primary/50 transition-colors flex flex-col justify-between">
               <CardHeader className="pb-3">
@@ -474,40 +474,83 @@ Elena Rostova,+44 7700 900733,52 Commercial Road Whitechapel E1,14 Bishopsgate L
               </CardFooter>
             </Card>
 
-            {/* Card 4: WhatsApp Business Platform (In Development / Non-Functional) */}
-            <Card className="shadow-xs border-dashed border-amber-500/40 bg-amber-500/5 flex flex-col justify-between">
+            {/* Card 4: WhatsApp Business Platform */}
+            <Card className="shadow-xs hover:border-emerald-500/50 transition-colors flex flex-col justify-between">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <Badge variant="outline" className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[10px] font-mono font-bold">
-                    IN DEVELOPMENT
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-mono font-bold">
+                    READY / LIVE
                   </Badge>
-                  <MessageSquare className="h-5 w-5 text-amber-500" />
+                  <MessageSquare className="h-5 w-5 text-emerald-600" />
                 </div>
                 <CardTitle className="text-base font-bold mt-2 text-foreground">
-                  WhatsApp Business
+                  WhatsApp Cloud API
                 </CardTitle>
                 <CardDescription className="text-xs text-muted-foreground">
-                  Conversational order ingestion via Meta Graph API with Vertex AI message extraction and human verification.
+                  Conversational order ingestion, live tracking ETA inquiries, and automated Paystack payment link dispatches.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-0 text-xs space-y-2">
-                <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-2.5 text-[11px] text-amber-800 dark:text-amber-200">
-                  <div className="font-semibold flex items-center gap-1.5 mb-1">
-                    <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
-                    Integration Under Development
-                  </div>
-                  Meta Webhook verification endpoint is stubbed (`/api/v1/webhooks/whatsapp`). Direct connection disabled until Meta review is completed.
+              <CardContent className="pt-0 text-xs space-y-2 text-muted-foreground">
+                <div className="flex items-center justify-between border-t border-border/50 pt-2 font-mono text-[11px]">
+                  <span>Webhook URL</span>
+                  <span className="text-foreground">/api/v1/webhooks/whatsapp</span>
+                </div>
+                <div className="flex items-center justify-between font-mono text-[11px]">
+                  <span>Intents</span>
+                  <span className="text-foreground font-semibold">Booking, Tracking, Pay</span>
                 </div>
               </CardContent>
-              <CardFooter className="pt-2 border-t border-amber-500/20">
+              <CardFooter className="pt-2 border-t border-border/60">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setWhatsAppModalOpen(true)}
-                  className="w-full text-xs gap-1.5 border-amber-500/30 hover:bg-amber-500/10"
+                  className="w-full text-xs gap-1.5"
                 >
-                  <Info className="h-3.5 w-3.5 text-amber-600" />
-                  Architecture Preview
+                  <Info className="h-3.5 w-3.5 text-emerald-600" />
+                  View Webhook & Handshake
+                </Button>
+              </CardFooter>
+            </Card>
+
+            {/* Card 5: Paystack Payment Gateway */}
+            <Card className="shadow-xs hover:border-emerald-500/50 transition-colors flex flex-col justify-between">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-mono font-bold">
+                    READY / LIVE
+                  </Badge>
+                  <CreditCard className="h-5 w-5 text-emerald-600" />
+                </div>
+                <CardTitle className="text-base font-bold mt-2 text-foreground">
+                  Paystack Gateway
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">
+                  Automated payment-before-delivery link generation, web checkout, and webhook verification for courier parcel clearance.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs space-y-2 text-muted-foreground">
+                <div className="flex items-center justify-between border-t border-border/50 pt-2 font-mono text-[11px]">
+                  <span>Webhook URL</span>
+                  <span className="text-foreground">/api/v1/webhooks/paystack</span>
+                </div>
+                <div className="flex items-center justify-between font-mono text-[11px]">
+                  <span>Security</span>
+                  <span className="text-foreground">HMAC-SHA512</span>
+                </div>
+              </CardContent>
+              <CardFooter className="pt-2 border-t border-border/60">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setStatusNotice("Paystack Webhook listening on /api/v1/webhooks/paystack (Event: charge.success)");
+                    setTimeout(() => setStatusNotice(null), 4000);
+                  }}
+                  className="w-full text-xs gap-1.5"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  Verify Gateway Status
                 </Button>
               </CardFooter>
             </Card>

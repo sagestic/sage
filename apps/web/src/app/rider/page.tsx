@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Clock,
   Compass,
+  CreditCard,
   ListOrdered,
   MapPin,
   Navigation,
@@ -302,6 +303,71 @@ export default function RiderPwaPage() {
                     </Button>
                   </a>
                 </div>
+
+                {/* Delivery Payment Check & Paystack Collection */}
+                {activeOrder.paymentStatus === "PAID" ? (
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/60 p-3 text-xs text-emerald-200 flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      <div>
+                        <span className="font-bold text-emerald-300">Payment Verified (Paystack)</span>
+                        <div className="text-[10px] text-emerald-400/80">
+                          ₦{(activeOrder.paymentAmount || 4500).toLocaleString()} • Ref: {activeOrder.paystackReference || "Verified"}
+                        </div>
+                      </div>
+                    </div>
+                    <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] font-mono">
+                      CLEAR TO RELEASE ✓
+                    </Badge>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-amber-500/40 bg-amber-950/40 p-3 text-xs text-amber-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <CreditCard className="h-4 w-4 text-amber-400" />
+                        <span className="font-bold text-amber-300">Collect Payment Before Release</span>
+                      </div>
+                      <span className="font-bold font-mono text-white text-sm">
+                        ₦{(activeOrder.paymentAmount || 4500).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-amber-200/80">
+                      Do not release package without payment verification.
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 text-xs h-8 border-slate-700 text-slate-200 gap-1 hover:bg-slate-800"
+                        onClick={() => {
+                          const url = `https://wa.me/${activeOrder.customerPhone.replace(/\D/g, "")}?text=${encodeURIComponent(
+                            `Hello ${activeOrder.customerName}, your courier is arriving soon. Please complete payment of ₦${activeOrder.paymentAmount || 4500} via Paystack: https://checkout.paystack.com/simulate_${activeOrder.orderNumber}`,
+                          )}`;
+                          window.open(url, "_blank");
+                        }}
+                      >
+                        <Send className="h-3 w-3 text-emerald-400" /> Send Paystack via WhatsApp
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="text-xs h-8 bg-emerald-700 hover:bg-emerald-600 text-white font-bold"
+                        onClick={() => {
+                          sageRepo.markOrderPaid(
+                            orgId,
+                            activeOrder.id,
+                            activeOrder.paymentAmount || 4500,
+                            `cash_${Date.now()}`,
+                            "CASH",
+                          );
+                          setToastMessage("Cash collected & verified! Package cleared for release.");
+                          loadData();
+                        }}
+                      >
+                        Confirm Cash Collected
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Pickup and Drop-off Stops */}
                 <div className="space-y-3 relative pl-6 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-700">

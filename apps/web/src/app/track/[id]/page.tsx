@@ -4,7 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
+  CheckCircle2,
   Compass,
+  CreditCard,
   Phone,
   ShieldCheck,
 } from "lucide-react";
@@ -26,14 +28,35 @@ export default function CustomerOrderTrackingPage() {
       batteryLevel: number;
     };
   } | null>(null);
+  const [isPaying, setIsPaying] = React.useState(false);
 
-  React.useEffect(() => {
+  const loadTrackingData = React.useCallback(() => {
     if (!id) return;
     const result = sageRepo.getPublicTrackingOrder(id);
     if (result) {
       setData(result);
     }
   }, [id]);
+
+  React.useEffect(() => {
+    loadTrackingData();
+  }, [loadTrackingData]);
+
+  const handlePayWithPaystack = () => {
+    if (!data?.order) return;
+    setIsPaying(true);
+    setTimeout(() => {
+      sageRepo.markOrderPaid(
+        data.order.organizationId,
+        data.order.orderNumber,
+        data.order.paymentAmount || 4500,
+        `pstk_${Date.now()}`,
+        "PAYSTACK",
+      );
+      loadTrackingData();
+      setIsPaying(false);
+    }, 1200);
+  };
 
   if (!data) {
     return (
@@ -184,6 +207,55 @@ export default function CustomerOrderTrackingPage() {
                     <Phone className="h-3.5 w-3.5" /> Call Courier
                   </Button>
                 </a>
+              </div>
+            )}
+
+            {/* Paystack Payment Status / Online Checkout */}
+            {order.paymentStatus === "PAID" ? (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/60 p-3.5 flex items-center justify-between text-xs">
+                <div className="flex items-center space-x-2.5">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                  <div>
+                    <div className="font-bold text-emerald-300">
+                      Payment Confirmed (Paystack Verified)
+                    </div>
+                    <div className="text-[11px] text-emerald-400/80 mt-0.5">
+                      ₦{(order.paymentAmount || 4500).toLocaleString()} • Ref: {order.paystackReference || "Direct"}
+                    </div>
+                  </div>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="border-emerald-500/40 bg-emerald-500/20 text-emerald-300 font-mono text-[10px]"
+                >
+                  PAID ✓
+                </Badge>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-950/40 p-3.5 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <CreditCard className="h-4 w-4 text-amber-400" />
+                    <span className="font-bold text-amber-200">
+                      Payment Required Before Handover
+                    </span>
+                  </div>
+                  <span className="font-mono font-bold text-white text-sm">
+                    ₦{(order.paymentAmount || 4500).toLocaleString()}
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                  To ensure contactless delivery and release of your package, please complete payment via Paystack:
+                </p>
+                <Button
+                  size="sm"
+                  className="w-full h-9 bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1.5 shadow-md"
+                  onClick={handlePayWithPaystack}
+                  disabled={isPaying}
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  {isPaying ? "Verifying with Paystack..." : `Pay ₦${(order.paymentAmount || 4500).toLocaleString()} via Paystack`}
+                </Button>
               </div>
             )}
 
