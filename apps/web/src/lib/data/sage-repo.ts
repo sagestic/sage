@@ -3,16 +3,24 @@ import type {
   CreateIntegrationInput,
   CreateOrderInput,
   CreateWebhookSubscriptionInput,
+  CustodyEventType,
   IncidentSeverity,
   IncidentStatus,
   IngestOrderInput,
   IntegrationProvider,
   IntegrationStatus,
+  InterstatePlanInput,
   InviteRiderInput,
+  LegStatus,
+  LegType,
   OrderPriority,
   OrderStatus,
+  ParkDropoffInput,
+  ParkRetrievedInput,
+  RetrievalAssignInput,
   RiderStatus,
   Role,
+  SealCheck,
   VehicleType,
   WebhookEvent,
 } from "@sage/site-schema";
@@ -68,8 +76,100 @@ export interface OrderItem {
   deliveryFeeNgn?: number;
   codRemittanceStatus?: "PENDING" | "REMITTED" | "NOT_APPLICABLE";
   metadata?: Record<string, unknown>;
+  isInterstate?: boolean;
+  originState?: string;
+  destState?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InterstateLegItem {
+  id: string;
+  organizationId: string;
+  orderId: string;
+  orderNumber: string;
+  sequenceIndex: number;
+  type: LegType;
+  status: LegStatus;
+  originPark?: string;
+  destPark?: string;
+  transportCompany?: string;
+  vehiclePlate?: string;
+  vehicleDescription?: string;
+  driverPhone?: string;
+  driverNote?: string;
+  waybillNumber?: string;
+  waybillPhotoUrl?: string;
+  sealNumber?: string;
+  sealCheck?: SealCheck;
+  fareAmountNgn?: number;
+  fareReceiptPhotoUrl?: string;
+  droppedAt?: string;
+  departedAt?: string;
+  expectedArrivalAt?: string;
+  retrievedAt?: string;
+  riderProfileId?: string;
+  riderName?: string;
+  partnerName?: string;
+  partnerDepot?: string;
+  photoUrls: string[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustodyEventItem {
+  id: string;
+  organizationId: string;
+  orderId: string;
+  legId?: string;
+  eventType: CustodyEventType;
+  actorType: string;
+  actorId?: string;
+  actorName?: string;
+  latitude?: number;
+  longitude?: number;
+  photoUrls: string[];
+  note?: string;
+  createdAt: string;
+}
+
+export interface ParkItem {
+  id: string;
+  organizationId: string;
+  name: string;
+  city: string;
+  state: string;
+  address?: string;
+  notes?: string;
+  useCount: number;
+}
+
+export interface CorridorEta {
+  originState: string;
+  destState: string;
+  roadHours: number;
+  bufferHours: number;
+}
+
+export const DEFAULT_CORRIDOR_ETAS: CorridorEta[] = [
+  { originState: "Lagos", destState: "FCT Abuja", roadHours: 12, bufferHours: 4 },
+  { originState: "Lagos", destState: "Rivers", roadHours: 10, bufferHours: 4 },
+  { originState: "FCT Abuja", destState: "Kano", roadHours: 7, bufferHours: 3 },
+  { originState: "Lagos", destState: "Oyo", roadHours: 3, bufferHours: 2 },
+  { originState: "Lagos", destState: "Anambra", roadHours: 9, bufferHours: 3 },
+];
+
+export function resolveCorridorEta(
+  originState: string,
+  destState: string,
+  corridors: CorridorEta[] = DEFAULT_CORRIDOR_ETAS,
+): CorridorEta {
+  const norm = (s: string) => s.trim().toLowerCase();
+  const hit = corridors.find(
+    (c) => norm(c.originState) === norm(originState) && norm(c.destState) === norm(destState),
+  );
+  return hit ?? { originState, destState, roadHours: 12, bufferHours: 6 };
 }
 
 export interface RiderItem {
@@ -204,6 +304,10 @@ class SageDataStore {
   private incidents: IncidentItem[] = [];
   private recommendations: RecommendationItem[] = [];
   private auditEvents: AuditEventItem[] = [];
+  private legs: InterstateLegItem[] = [];
+  private custodyEvents: CustodyEventItem[] = [];
+  private parks: ParkItem[] = [];
+  private corridorEtas: CorridorEta[] = [...DEFAULT_CORRIDOR_ETAS];
   private idempotencyCache: Set<string> = new Set();
 
   constructor() {
@@ -668,6 +772,177 @@ class SageDataStore {
       details: "Initial multi-tenant operational data established.",
       timestamp: new Date(Date.now() - 120 * 60000).toISOString(),
     });
+
+    // 10. Park directory seed
+    this.parks.push(
+      {
+        id: "park_jibowu",
+        organizationId: orgApex,
+        name: "Jibowu Motor Park",
+        city: "Lagos",
+        state: "Lagos",
+        address: "Jibowu, Yaba, Lagos",
+        notes: "ABC Motors office is block C. Mile 2 bound buses load from bay 4.",
+        useCount: 34,
+      },
+      {
+        id: "park_utako",
+        organizationId: orgApex,
+        name: "Utako Motor Park",
+        city: "Abuja",
+        state: "FCT Abuja",
+        address: "Utako District, Abuja",
+        notes: "Lagos arrivals park at the north wing. Waybill office closes 10pm.",
+        useCount: 21,
+      },
+      {
+        id: "park_ojota",
+        organizationId: orgApex,
+        name: "Ojota Motor Park",
+        city: "Lagos",
+        state: "Lagos",
+        address: "Ojota, Ikorodu Road, Lagos",
+        useCount: 12,
+      },
+    );
+
+    // 11. Interstate demo order (Lagos -> Abuja, linehaul active)
+    const interstateOrder: OrderItem = {
+      id: "ord_apex_201",
+      organizationId: orgApex,
+      orderNumber: "ORD-9501",
+      source: "WEBSITE_API",
+      customerName: "Ngozi Okafor",
+      customerPhone: "+234 803 555 0142",
+      pickupAddress: "14 Admiralty Way, Lekki Phase 1, Lagos",
+      pickupLat: 6.4281,
+      pickupLng: 3.4219,
+      deliveryAddress: "Plot 22, Garki Area 11, Abuja",
+      deliveryLat: 9.036,
+      deliveryLng: 7.489,
+      status: "IN_TRANSIT",
+      priority: "EXPRESS",
+      packageSize: "MEDIUM",
+      paymentStatus: "PAID",
+      paymentAmount: 12500,
+      paymentCurrency: "NGN",
+      paystackReference: "sage_ORD-9501_paid",
+      paidAt: new Date(Date.now() - 300 * 60000).toISOString(),
+      assignedRiderId: "rdr_apex_1",
+      assignedRiderName: "Marcus Thorne",
+      assignedRiderVehicle: "MOTORCYCLE",
+      isInterstate: true,
+      originState: "Lagos",
+      destState: "FCT Abuja",
+      estimatedDeliveryAt: new Date(Date.now() + 600 * 60000).toISOString(),
+      notes: "Interstate: Lagos -> Abuja via Jibowu park.",
+      createdAt: new Date(Date.now() - 320 * 60000).toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.orders.unshift(interstateOrder);
+
+    const leg0: InterstateLegItem = {
+      id: "leg_9501_0",
+      organizationId: orgApex,
+      orderId: interstateOrder.id,
+      orderNumber: interstateOrder.orderNumber,
+      sequenceIndex: 0,
+      type: "FIRST_MILE",
+      status: "COMPLETED",
+      originPark: "Jibowu Motor Park",
+      riderProfileId: "rdr_apex_1",
+      riderName: "Marcus Thorne",
+      photoUrls: [],
+      createdAt: new Date(Date.now() - 300 * 60000).toISOString(),
+      updatedAt: new Date(Date.now() - 240 * 60000).toISOString(),
+    };
+    const leg1: InterstateLegItem = {
+      id: "leg_9501_1",
+      organizationId: orgApex,
+      orderId: interstateOrder.id,
+      orderNumber: interstateOrder.orderNumber,
+      sequenceIndex: 1,
+      type: "LINEHAUL_BUS",
+      status: "ACTIVE",
+      originPark: "Jibowu Motor Park",
+      destPark: "Utako Motor Park",
+      transportCompany: "ABC Motors",
+      vehiclePlate: "LAG-482-XQ",
+      waybillNumber: "ABC-88412",
+      waybillPhotoUrl: "waybill_abc_88412.jpg",
+      sealNumber: "SEAL-2201",
+      fareAmountNgn: 8000,
+      droppedAt: new Date(Date.now() - 240 * 60000).toISOString(),
+      departedAt: new Date(Date.now() - 200 * 60000).toISOString(),
+      expectedArrivalAt: new Date(Date.now() + 520 * 60000).toISOString(),
+      photoUrls: ["parcel_sealed_9501.jpg", "bus_loaded_9501.jpg"],
+      createdAt: new Date(Date.now() - 240 * 60000).toISOString(),
+      updatedAt: new Date(Date.now() - 200 * 60000).toISOString(),
+    };
+    const leg2: InterstateLegItem = {
+      id: "leg_9501_2",
+      organizationId: orgApex,
+      orderId: interstateOrder.id,
+      orderNumber: interstateOrder.orderNumber,
+      sequenceIndex: 2,
+      type: "LAST_MILE",
+      status: "PENDING",
+      originPark: "Utako Motor Park",
+      photoUrls: [],
+      createdAt: new Date(Date.now() - 240 * 60000).toISOString(),
+      updatedAt: new Date(Date.now() - 240 * 60000).toISOString(),
+    };
+    this.legs.push(leg0, leg1, leg2);
+    this.custodyEvents.push(
+      {
+        id: "cev_9501_1",
+        organizationId: orgApex,
+        orderId: interstateOrder.id,
+        eventType: "ORDER_CREATED",
+        actorType: "DISPATCHER",
+        actorName: "Dispatcher",
+        photoUrls: [],
+        note: "Interstate order Lagos -> FCT Abuja created.",
+        createdAt: new Date(Date.now() - 320 * 60000).toISOString(),
+      },
+      {
+        id: "cev_9501_2",
+        organizationId: orgApex,
+        orderId: interstateOrder.id,
+        eventType: "INTERSTATE_PLANNED",
+        actorType: "DISPATCHER",
+        actorName: "Dispatcher",
+        photoUrls: [],
+        note: "3 legs planned: first-mile, Jibowu -> Utako linehaul, last-mile.",
+        createdAt: new Date(Date.now() - 310 * 60000).toISOString(),
+      },
+      {
+        id: "cev_9501_3",
+        organizationId: orgApex,
+        orderId: interstateOrder.id,
+        legId: leg1.id,
+        eventType: "PARK_DROPOFF",
+        actorType: "RIDER",
+        actorId: "rdr_apex_1",
+        actorName: "Marcus Thorne",
+        photoUrls: ["parcel_sealed_9501.jpg", "waybill_abc_88412.jpg"],
+        note: "Handed to ABC Motors at Jibowu. Waybill ABC-88412. Fare ₦8,000.",
+        createdAt: new Date(Date.now() - 240 * 60000).toISOString(),
+      },
+      {
+        id: "cev_9501_4",
+        organizationId: orgApex,
+        orderId: interstateOrder.id,
+        legId: leg1.id,
+        eventType: "DEPARTED",
+        actorType: "RIDER",
+        actorId: "rdr_apex_1",
+        actorName: "Marcus Thorne",
+        photoUrls: ["bus_loaded_9501.jpg"],
+        note: "Bus LAG-482-XQ departed Jibowu. Expected Utako tonight.",
+        createdAt: new Date(Date.now() - 200 * 60000).toISOString(),
+      },
+    );
   }
 
   // Orders
@@ -703,6 +978,9 @@ class SageDataStore {
       packageSize: input.packageSize || "MEDIUM",
       estimatedDeliveryAt: new Date(Date.now() + 45 * 60000).toISOString(),
       notes: input.notes,
+      isInterstate: input.isInterstate ?? false,
+      originState: input.originState || undefined,
+      destState: input.destState || undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -792,6 +1070,9 @@ class SageDataStore {
         input.deliveryDeadline || new Date(Date.now() + 60 * 60000).toISOString(),
       notes: input.notes,
       metadata: input.metadata,
+      isInterstate: input.isInterstate ?? false,
+      originState: input.originState || undefined,
+      destState: input.destState || undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1179,6 +1460,508 @@ class SageDataStore {
     };
   }
 
+  // ---- Interstate park handoff (bus drivers unaffiliated: no driver OTP) ----
+
+  getLegs(orgId: string, orderId: string): InterstateLegItem[] {
+    return this.legs
+      .filter((l) => l.organizationId === orgId && l.orderId === orderId)
+      .sort((a, b) => a.sequenceIndex - b.sequenceIndex);
+  }
+
+  getLeg(orgId: string, legId: string): InterstateLegItem | undefined {
+    return this.legs.find((l) => l.organizationId === orgId && l.id === legId);
+  }
+
+  getLegByOrderAndType(
+    orgId: string,
+    orderId: string,
+    type: LegType,
+  ): InterstateLegItem | undefined {
+    return this.legs.find(
+      (l) => l.organizationId === orgId && l.orderId === orderId && l.type === type,
+    );
+  }
+
+  getCustodyTimeline(orgId: string, orderId: string): CustodyEventItem[] {
+    return this.custodyEvents
+      .filter((e) => e.organizationId === orgId && e.orderId === orderId)
+      .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
+  }
+
+  getParks(orgId: string): ParkItem[] {
+    return this.parks
+      .filter((p) => p.organizationId === orgId)
+      .sort((a, b) => b.useCount - a.useCount);
+  }
+
+  upsertPark(orgId: string, name: string, state?: string, city?: string): ParkItem {
+    const norm = (s: string) => s.trim().toLowerCase();
+    const existing = this.parks.find(
+      (p) => p.organizationId === orgId && norm(p.name) === norm(name),
+    );
+    if (existing) {
+      existing.useCount += 1;
+      return existing;
+    }
+    const park: ParkItem = {
+      id: `park_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      organizationId: orgId,
+      name: name.trim(),
+      city: city?.trim() || "",
+      state: state?.trim() || "",
+      useCount: 1,
+    };
+    this.parks.push(park);
+    return park;
+  }
+
+  getCorridorEtas(): CorridorEta[] {
+    return [...this.corridorEtas];
+  }
+
+  upsertCorridorEta(input: CorridorEta): CorridorEta {
+    const norm = (s: string) => s.trim().toLowerCase();
+    const existing = this.corridorEtas.find(
+      (c) => norm(c.originState) === norm(input.originState) && norm(c.destState) === norm(input.destState),
+    );
+    if (existing) {
+      existing.roadHours = input.roadHours;
+      existing.bufferHours = input.bufferHours;
+      return existing;
+    }
+    this.corridorEtas.push({ ...input });
+    return input;
+  }
+
+  private recordCustodyEvent(
+    orgId: string,
+    orderId: string,
+    eventType: CustodyEventType,
+    opts: {
+      legId?: string;
+      actorType?: string;
+      actorId?: string;
+      actorName?: string;
+      latitude?: number;
+      longitude?: number;
+      photoUrls?: string[];
+      note?: string;
+    } = {},
+  ): CustodyEventItem {
+    const event: CustodyEventItem = {
+      id: `cev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      organizationId: orgId,
+      orderId,
+      legId: opts.legId,
+      eventType,
+      actorType: opts.actorType ?? "SYSTEM",
+      actorId: opts.actorId,
+      actorName: opts.actorName,
+      latitude: opts.latitude,
+      longitude: opts.longitude,
+      photoUrls: opts.photoUrls ?? [],
+      note: opts.note,
+      createdAt: new Date().toISOString(),
+    };
+    this.custodyEvents.push(event);
+    return event;
+  }
+
+  planInterstate(
+    orgId: string,
+    orderId: string,
+    input: InterstatePlanInput,
+  ): { legs: InterstateLegItem[]; error?: string } {
+    const order = this.getOrder(orgId, orderId);
+    if (!order) return { legs: [], error: "Order not found" };
+    if (this.legs.some((l) => l.organizationId === orgId && l.orderId === orderId)) {
+      return { legs: this.getLegs(orgId, orderId), error: "Interstate plan already exists" };
+    }
+
+    order.isInterstate = true;
+    order.originState = input.originState;
+    order.destState = input.destState;
+    order.updatedAt = new Date().toISOString();
+
+    const now = new Date().toISOString();
+    const originRider = input.originRiderId ? this.getRider(orgId, input.originRiderId) : undefined;
+    const destRider = input.destRiderId ? this.getRider(orgId, input.destRiderId) : undefined;
+
+    const legs: InterstateLegItem[] = [
+      {
+        id: `leg_${Date.now()}_0`,
+        organizationId: orgId,
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        sequenceIndex: 0,
+        type: "FIRST_MILE",
+        status: "ACTIVE",
+        originPark: input.originPark,
+        riderProfileId: originRider?.id,
+        riderName: originRider?.name,
+        photoUrls: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: `leg_${Date.now()}_1`,
+        organizationId: orgId,
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        sequenceIndex: 1,
+        type: "LINEHAUL_BUS",
+        status: "PENDING",
+        originPark: input.originPark,
+        destPark: input.destPark,
+        photoUrls: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: `leg_${Date.now()}_2`,
+        organizationId: orgId,
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        sequenceIndex: 2,
+        type: "LAST_MILE",
+        status: "PENDING",
+        originPark: input.destPark,
+        riderProfileId: destRider?.id,
+        riderName: destRider?.name,
+        photoUrls: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    this.legs.push(...legs);
+
+    if (originRider) {
+      this.assignRider(orgId, order.id, originRider.id);
+      order.status = "IN_TRANSIT";
+    }
+
+    this.recordCustodyEvent(orgId, order.id, "INTERSTATE_PLANNED", {
+      actorType: "DISPATCHER",
+      actorName: "Dispatcher",
+      note: `3 legs planned: first-mile, ${input.originPark ?? input.originState} -> ${input.destPark ?? input.destState} linehaul, last-mile.`,
+    });
+    this.logAudit(
+      orgId,
+      "Dispatcher",
+      "DISPATCHER",
+      "INTERSTATE_PLANNED",
+      "ORDER",
+      order.id,
+      `Planned interstate ${order.orderNumber}: ${input.originState} -> ${input.destState}`,
+    );
+    return { legs };
+  }
+
+  recordParkDropoff(
+    orgId: string,
+    orderId: string,
+    riderId: string,
+    input: ParkDropoffInput,
+  ): { leg?: InterstateLegItem; error?: string } {
+    const order = this.getOrder(orgId, orderId);
+    if (!order) return { error: "Order not found" };
+    const rider = this.getRider(orgId, riderId);
+    if (!rider) return { error: "Rider not found" };
+
+    // Required-field enforcement (driver phone deliberately NOT required)
+    if (!input.originPark?.trim()) return { error: "Origin park is required" };
+    if (!input.transportCompany?.trim()) return { error: "Transport company is required" };
+    if (!input.vehiclePlate?.trim() && !input.vehicleDescription?.trim()) {
+      return { error: "Bus plate or description is required" };
+    }
+    if (!input.waybillNumber?.trim()) return { error: "Waybill number is required" };
+    if (!input.waybillPhotoUrl?.trim()) return { error: "Waybill photo is required" };
+    if (!input.photoUrls || input.photoUrls.length < 1) {
+      return { error: "At least one parcel photo is required" };
+    }
+
+    let linehaul = this.getLegByOrderAndType(orgId, orderId, "LINEHAUL_BUS");
+    if (!linehaul) {
+      // Auto-plan when dispatcher skipped planning (origin/dest states required)
+      if (!order.originState || !order.destState) {
+        return { error: "Plan interstate first (origin/dest state missing)" };
+      }
+      const planned = this.planInterstate(orgId, orderId, {
+        originState: order.originState,
+        destState: order.destState,
+        originPark: input.originPark,
+        destPark: input.destPark,
+        originRiderId: riderId,
+      });
+      if (planned.error && planned.legs.length === 0) return { error: planned.error };
+      linehaul = this.getLegByOrderAndType(orgId, orderId, "LINEHAUL_BUS");
+      if (!linehaul) return { error: "Could not create linehaul leg" };
+    }
+
+    const firstMile = this.getLegByOrderAndType(orgId, orderId, "FIRST_MILE");
+    if (firstMile) {
+      firstMile.status = "COMPLETED";
+      firstMile.updatedAt = new Date().toISOString();
+    }
+
+    const corridor = resolveCorridorEta(
+      order.originState ?? "",
+      order.destState ?? "",
+      this.corridorEtas,
+    );
+    const departedAt = input.departedAt ?? new Date().toISOString();
+    const eta = new Date(
+      new Date(departedAt).getTime() + (corridor.roadHours + corridor.bufferHours) * 3600000,
+    ).toISOString();
+
+    linehaul.status = "ACTIVE";
+    linehaul.originPark = input.originPark.trim();
+    if (input.destPark?.trim()) linehaul.destPark = input.destPark.trim();
+    linehaul.transportCompany = input.transportCompany.trim();
+    linehaul.vehiclePlate = input.vehiclePlate?.trim() || undefined;
+    linehaul.vehicleDescription = input.vehicleDescription?.trim() || undefined;
+    linehaul.waybillNumber = input.waybillNumber.trim();
+    linehaul.waybillPhotoUrl = input.waybillPhotoUrl.trim();
+    linehaul.sealNumber = input.sealNumber?.trim() || undefined;
+    linehaul.fareAmountNgn = input.fareAmountNgn;
+    linehaul.fareReceiptPhotoUrl = input.fareReceiptPhotoUrl?.trim() || undefined;
+    linehaul.photoUrls = [...input.photoUrls];
+    linehaul.driverPhone = input.driverPhone?.trim() || undefined;
+    linehaul.driverNote = input.driverNote?.trim() || undefined;
+    linehaul.droppedAt = new Date().toISOString();
+    linehaul.departedAt = departedAt;
+    linehaul.expectedArrivalAt = eta;
+    linehaul.notes = input.notes?.trim() || undefined;
+    linehaul.updatedAt = new Date().toISOString();
+
+    this.upsertPark(orgId, linehaul.originPark, order.originState);
+    if (linehaul.destPark) this.upsertPark(orgId, linehaul.destPark, order.destState);
+
+    order.status = "IN_TRANSIT";
+    order.updatedAt = new Date().toISOString();
+
+    this.recordCustodyEvent(orgId, order.id, "PARK_DROPOFF", {
+      legId: linehaul.id,
+      actorType: "RIDER",
+      actorId: rider.id,
+      actorName: rider.name,
+      photoUrls: [linehaul.waybillPhotoUrl, ...input.photoUrls],
+      note: `Handed to ${linehaul.transportCompany} at ${linehaul.originPark}. Waybill ${linehaul.waybillNumber}.${linehaul.fareAmountNgn ? ` Fare ₦${linehaul.fareAmountNgn.toLocaleString()}.` : ""}`,
+    });
+    this.recordCustodyEvent(orgId, order.id, "DEPARTED", {
+      legId: linehaul.id,
+      actorType: "RIDER",
+      actorId: rider.id,
+      actorName: rider.name,
+      photoUrls: [...input.photoUrls],
+      note: `${linehaul.vehiclePlate ?? linehaul.vehicleDescription ?? "Bus"} departed ${linehaul.originPark}. Expected ${linehaul.destPark ?? order.destState} by ${new Date(eta).toLocaleString()}.`,
+    });
+    this.dispatchWebhookEvent(orgId, "delivery.status_updated", {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      status: "IN_TRANSIT",
+      leg: "LINEHAUL_BUS",
+      waybillNumber: linehaul.waybillNumber,
+    });
+    return { leg: linehaul };
+  }
+
+  assignRetrieval(
+    orgId: string,
+    orderId: string,
+    input: RetrievalAssignInput,
+  ): { leg?: InterstateLegItem; error?: string } {
+    const order = this.getOrder(orgId, orderId);
+    if (!order) return { error: "Order not found" };
+    const lastMile =
+      this.getLegByOrderAndType(orgId, orderId, "LAST_MILE") ??
+      this.getLegByOrderAndType(orgId, orderId, "PARTNER_HANDOFF");
+    if (!lastMile) return { error: "Last-mile leg not found" };
+
+    if (input.riderProfileId) {
+      const rider = this.getRider(orgId, input.riderProfileId);
+      if (!rider) return { error: "Rider not found" };
+      lastMile.type = "LAST_MILE";
+      lastMile.riderProfileId = rider.id;
+      lastMile.riderName = rider.name;
+      lastMile.partnerName = undefined;
+      lastMile.partnerDepot = undefined;
+    } else if (input.partnerName) {
+      lastMile.type = "PARTNER_HANDOFF";
+      lastMile.partnerName = input.partnerName.trim();
+      lastMile.partnerDepot = input.partnerDepot?.trim() || undefined;
+      lastMile.riderProfileId = undefined;
+      lastMile.riderName = undefined;
+    } else {
+      return { error: "Rider or partner is required" };
+    }
+    lastMile.status = lastMile.status === "COMPLETED" ? lastMile.status : "PENDING";
+    lastMile.updatedAt = new Date().toISOString();
+
+    this.recordCustodyEvent(orgId, order.id, "RETRIEVAL_ASSIGNED", {
+      legId: lastMile.id,
+      actorType: "DISPATCHER",
+      actorName: "Dispatcher",
+      note:
+        lastMile.type === "PARTNER_HANDOFF"
+          ? `Partner ${lastMile.partnerName}${lastMile.partnerDepot ? ` (${lastMile.partnerDepot})` : ""} assigned for retrieval.`
+          : `Retrieval assigned to ${lastMile.riderName} at ${lastMile.originPark ?? order.destState}.`,
+    });
+    return { leg: lastMile };
+  }
+
+  recordParkRetrieved(
+    orgId: string,
+    orderId: string,
+    riderId: string,
+    input: ParkRetrievedInput,
+  ): { leg?: InterstateLegItem; error?: string } {
+    const order = this.getOrder(orgId, orderId);
+    if (!order) return { error: "Order not found" };
+    const rider = this.getRider(orgId, riderId);
+    if (!rider) return { error: "Rider not found" };
+    if (!input.photoUrls || input.photoUrls.length < 1) {
+      return { error: "Retrieval photo is required" };
+    }
+
+    const linehaul = this.getLegByOrderAndType(orgId, orderId, "LINEHAUL_BUS");
+    if (!linehaul || (linehaul.status !== "ACTIVE" && linehaul.status !== "OVERDUE")) {
+      return { error: "No active linehaul to retrieve" };
+    }
+    const lastMile =
+      this.getLegByOrderAndType(orgId, orderId, "LAST_MILE") ??
+      this.getLegByOrderAndType(orgId, orderId, "PARTNER_HANDOFF");
+
+    linehaul.status = "COMPLETED";
+    linehaul.retrievedAt = new Date().toISOString();
+    linehaul.sealCheck = input.sealCheck;
+    linehaul.updatedAt = new Date().toISOString();
+
+    if (lastMile) {
+      lastMile.status = "ACTIVE";
+      lastMile.riderProfileId = rider.id;
+      lastMile.riderName = rider.name;
+      lastMile.updatedAt = new Date().toISOString();
+    }
+
+    order.assignedRiderId = rider.id;
+    order.assignedRiderName = rider.name;
+    order.assignedRiderVehicle = rider.vehicleType;
+    order.status = "IN_TRANSIT";
+    order.updatedAt = new Date().toISOString();
+
+    this.recordCustodyEvent(orgId, order.id, "PARK_RETRIEVED", {
+      legId: linehaul.id,
+      actorType: "RIDER",
+      actorId: rider.id,
+      actorName: rider.name,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      photoUrls: [...input.photoUrls],
+      note: `Retrieved at ${linehaul.destPark ?? order.destState}. Seal ${input.sealCheck.toLowerCase()}.${input.note ? ` ${input.note}` : ""}`,
+    });
+
+    if (input.sealCheck === "BROKEN") {
+      this.recordCustodyEvent(orgId, order.id, "SEAL_BROKEN", {
+        legId: linehaul.id,
+        actorType: "RIDER",
+        actorId: rider.id,
+        actorName: rider.name,
+        photoUrls: [...input.photoUrls],
+        note: "Seal broken on retrieval. Incident opened; last-mile continues.",
+      });
+      this.createIncident(orgId, {
+        title: `Broken seal on ${order.orderNumber}`,
+        description: `Parcel retrieved at ${linehaul.destPark ?? order.destState} with broken seal (waybill ${linehaul.waybillNumber ?? "unknown"}). Photos attached to custody timeline. Last-mile continues.`,
+        severity: "HIGH",
+        category: "SEAL_BROKEN",
+        orderId: order.id,
+        riderProfileId: rider.id,
+      });
+    }
+
+    this.dispatchWebhookEvent(orgId, "delivery.status_updated", {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      status: "IN_TRANSIT",
+      leg: "LAST_MILE",
+      sealCheck: input.sealCheck,
+    });
+    return { leg: linehaul };
+  }
+
+  flagOverdueLegs(orgId: string, nowIso?: string): InterstateLegItem[] {
+    const now = new Date(nowIso ?? new Date().toISOString()).getTime();
+    const flagged: InterstateLegItem[] = [];
+    for (const leg of this.legs) {
+      if (leg.organizationId !== orgId) continue;
+      if (leg.type !== "LINEHAUL_BUS" || leg.status !== "ACTIVE") continue;
+      if (!leg.expectedArrivalAt) continue;
+      if (new Date(leg.expectedArrivalAt).getTime() < now) {
+        leg.status = "OVERDUE";
+        leg.updatedAt = new Date().toISOString();
+        flagged.push(leg);
+        this.recordCustodyEvent(orgId, leg.orderId, "OVERDUE_FLAGGED", {
+          legId: leg.id,
+          actorType: "SYSTEM",
+          actorName: "Overdue Monitor",
+          note: `Linehaul overdue: expected ${leg.destPark ?? ""} by ${new Date(leg.expectedArrivalAt).toLocaleString()}. Waybill ${leg.waybillNumber ?? "unknown"}. Call park office.`,
+        });
+      }
+    }
+    return flagged;
+  }
+
+  getInterstateQueue(orgId: string): {
+    order: OrderItem;
+    linehaul?: InterstateLegItem;
+    lastMile?: InterstateLegItem;
+  }[] {
+    return this.orders
+      .filter((o) => o.organizationId === orgId && o.isInterstate)
+      .map((order) => ({
+        order,
+        linehaul: this.getLegByOrderAndType(orgId, order.id, "LINEHAUL_BUS"),
+        lastMile:
+          this.getLegByOrderAndType(orgId, order.id, "LAST_MILE") ??
+          this.getLegByOrderAndType(orgId, order.id, "PARTNER_HANDOFF"),
+      }));
+  }
+
+  getRiderInterstateTasks(
+    orgId: string,
+    riderId: string,
+  ): { order: OrderItem; leg: InterstateLegItem; task: "PARK_DROPOFF" | "PARK_RETRIEVAL" }[] {
+    const tasks: { order: OrderItem; leg: InterstateLegItem; task: "PARK_DROPOFF" | "PARK_RETRIEVAL" }[] = [];
+    for (const leg of this.legs) {
+      if (leg.organizationId !== orgId) continue;
+      const order = this.orders.find((o) => o.organizationId === orgId && o.id === leg.orderId);
+      if (!order) continue;
+      if (leg.type === "FIRST_MILE" && leg.status === "ACTIVE" && leg.riderProfileId === riderId) {
+        tasks.push({ order, leg, task: "PARK_DROPOFF" });
+      }
+      if (
+        (leg.type === "LAST_MILE" || leg.type === "PARTNER_HANDOFF") &&
+        leg.status === "PENDING" &&
+        leg.riderProfileId === riderId
+      ) {
+        tasks.push({ order, leg, task: "PARK_RETRIEVAL" });
+      }
+      // Unassigned retrieval at an active linehaul is visible to all riders in dest state
+      if (
+        (leg.type === "LAST_MILE" || leg.type === "PARTNER_HANDOFF") &&
+        leg.status === "PENDING" &&
+        !leg.riderProfileId
+      ) {
+        const linehaul = this.getLegByOrderAndType(orgId, order.id, "LINEHAUL_BUS");
+        if (linehaul && (linehaul.status === "ACTIVE" || linehaul.status === "OVERDUE")) {
+          tasks.push({ order, leg, task: "PARK_RETRIEVAL" });
+        }
+      }
+    }
+    return tasks;
+  }
+
   // Public Tracking Query (for customer WhatsApp tracking links)
   getPublicTrackingOrder(orderId: string): {
     order: OrderItem;
@@ -1190,6 +1973,8 @@ class SageDataStore {
       longitude?: number;
       batteryLevel: number;
     };
+    legs: InterstateLegItem[];
+    timeline: CustodyEventItem[];
   } | undefined {
     const order = this.orders.find((o) => o.id === orderId || o.orderNumber === orderId);
     if (!order) return undefined;
@@ -1209,7 +1994,11 @@ class SageDataStore {
       }
     }
 
-    return { order, courier };
+    const legs = order.isInterstate ? this.getLegs(order.organizationId, order.id) : [];
+    const timeline = order.isInterstate
+      ? this.getCustodyTimeline(order.organizationId, order.id)
+      : [];
+    return { order, courier, legs, timeline };
   }
 
   // Payment Verification & Processing (Paystack Integration)

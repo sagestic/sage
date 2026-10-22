@@ -11,7 +11,13 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@sage/ui";
-import { sageRepo, type OrderItem } from "../../../lib/data/sage-repo";
+import {
+  sageRepo,
+  type CustodyEventItem,
+  type InterstateLegItem,
+  type OrderItem,
+} from "../../../lib/data/sage-repo";
+import InterstateTimeline, { interstateStepIndex } from "../interstate-timeline";
 
 export default function CustomerOrderTrackingPage() {
   const params = useParams();
@@ -27,6 +33,8 @@ export default function CustomerOrderTrackingPage() {
       longitude?: number;
       batteryLevel: number;
     };
+    legs: InterstateLegItem[];
+    timeline: CustodyEventItem[];
   } | null>(null);
   const [isPaying, setIsPaying] = React.useState(false);
 
@@ -80,6 +88,7 @@ export default function CustomerOrderTrackingPage() {
   }
 
   const { order, courier } = data;
+  const isInterstate = order.isInterstate === true;
 
   // Determine active step
   const getStepIndex = (status: string) => {
@@ -97,7 +106,12 @@ export default function CustomerOrderTrackingPage() {
     }
   };
 
-  const stepIndex = getStepIndex(order.status);
+  const stepIndex = isInterstate
+    ? interstateStepIndex(data.legs, order.status === "DELIVERED")
+    : getStepIndex(order.status);
+  const stepLabels = isInterstate
+    ? ["Received", "Origin park", "On the road", "Dest. courier", "Delivered"]
+    : ["Received", "Assigned", "In Transit", "Delivered"];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center p-3 sm:p-6 antialiased selection:bg-primary/20">
@@ -121,7 +135,7 @@ export default function CustomerOrderTrackingPage() {
             variant="outline"
             className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[10px] font-mono"
           >
-            LIVE GPS
+            {isInterstate ? "CHECKPOINT UPDATES" : "LIVE GPS"}
           </Badge>
         </div>
 
@@ -157,8 +171,8 @@ export default function CustomerOrderTrackingPage() {
 
           <CardContent className="space-y-4 pt-0">
             {/* Visual Step Progress */}
-            <div className="grid grid-cols-4 gap-1 pt-1">
-              {["Received", "Assigned", "In Transit", "Delivered"].map((label, idx) => (
+            <div className={`grid ${isInterstate ? "grid-cols-5" : "grid-cols-4"} gap-1 pt-1`}>
+              {stepLabels.map((label, idx) => (
                 <div key={label} className="space-y-1.5 text-center">
                   <div
                     className={`h-1.5 rounded-full transition-all ${
@@ -208,6 +222,16 @@ export default function CustomerOrderTrackingPage() {
                   </Button>
                 </a>
               </div>
+            )}
+
+            {/* Interstate custody timeline */}
+            {isInterstate && (
+              <InterstateTimeline
+                legs={data.legs}
+                timeline={data.timeline}
+                originState={order.originState}
+                destState={order.destState}
+              />
             )}
 
             {/* Paystack Payment Status / Online Checkout */}

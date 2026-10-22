@@ -53,6 +53,7 @@ export default function OrdersPage() {
     "Pls send rider to pick up at 14 Admiralty Way Lekki Phase 1, deliver to 5 Adeola Odeku VI. Recipient: Tola 08031234567, Cash on delivery N12,000",
   );
   const [copiedTracking, setCopiedTracking] = React.useState(false);
+  const [isInterstateChecked, setIsInterstateChecked] = React.useState(false);
 
   const loadData = React.useCallback(() => {
     setOrders(sageRepo.getOrders(orgId));
@@ -163,6 +164,7 @@ export default function OrdersPage() {
   const onCreateOrder = (data: CreateOrderInput) => {
     const created = sageRepo.createOrder(orgId, data);
     setCreateOrderOpen(false);
+    setIsInterstateChecked(false);
     orderForm.reset({
       orderNumber: "ORD-9427",
       source: "MANUAL",
@@ -341,6 +343,13 @@ export default function OrdersPage() {
                     >
                       <td className="p-3 font-mono font-bold text-foreground">
                         {order.orderNumber}
+                        {order.isInterstate && (
+                          <div className="mt-0.5">
+                            <Badge variant="secondary" className="text-[9px] py-0">
+                              {order.originState} → {order.destState}
+                            </Badge>
+                          </div>
+                        )}
                       </td>
                       <td className="p-3">
                         <Badge
@@ -542,6 +551,41 @@ export default function OrdersPage() {
                   className="mt-1 h-16"
                   {...orderForm.register("notes")}
                 />
+              </div>
+
+              <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    {...orderForm.register("isInterstate", {
+                      onChange: (e) => setIsInterstateChecked(e.target.checked),
+                    })}
+                  />
+                  Interstate delivery (park-to-park linehaul)
+                </label>
+                {isInterstateChecked && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label htmlFor="originState">Origin state</Label>
+                      <Input
+                        id="originState"
+                        placeholder="Lagos"
+                        className="mt-1"
+                        {...orderForm.register("originState")}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="destState">Destination state</Label>
+                      <Input
+                        id="destState"
+                        placeholder="FCT Abuja"
+                        className="mt-1"
+                        {...orderForm.register("destState")}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

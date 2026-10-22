@@ -112,6 +112,9 @@ export const IngestOrderSchema = z.object({
   deliveryDeadline: z.string().optional(),
   notes: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  isInterstate: z.boolean().optional(),
+  originState: z.string().optional(),
+  destState: z.string().optional(),
 });
 export type IngestOrderInput = z.infer<typeof IngestOrderSchema>;
 
@@ -131,6 +134,9 @@ export const CreateOrderSchema = z.object({
   priority: OrderPrioritySchema.default("STANDARD"),
   packageSize: z.string().default("MEDIUM"),
   notes: z.string().optional(),
+  isInterstate: z.boolean().optional(),
+  originState: z.string().optional(),
+  destState: z.string().optional(),
 });
 export type CreateOrderInput = z.infer<typeof CreateOrderSchema>;
 
@@ -215,3 +221,88 @@ export const HealthCheckResponseSchema = z.object({
   timestamp: z.string(),
 });
 export type HealthCheckResponse = z.infer<typeof HealthCheckResponseSchema>;
+
+// Interstate park-handoff schemas (bus drivers are unaffiliated: no driver OTP)
+export const LegTypeSchema = z.enum([
+  "FIRST_MILE",
+  "LINEHAUL_BUS",
+  "LAST_MILE",
+  "PARTNER_HANDOFF",
+]);
+export type LegType = z.infer<typeof LegTypeSchema>;
+
+export const LegStatusSchema = z.enum([
+  "PENDING",
+  "ACTIVE",
+  "COMPLETED",
+  "OVERDUE",
+  "FAILED",
+]);
+export type LegStatus = z.infer<typeof LegStatusSchema>;
+
+export const SealCheckSchema = z.enum(["INTACT", "BROKEN", "NO_SEAL"]);
+export type SealCheck = z.infer<typeof SealCheckSchema>;
+
+export const CustodyEventTypeSchema = z.enum([
+  "ORDER_CREATED",
+  "INTERSTATE_PLANNED",
+  "PARK_DROPOFF",
+  "DEPARTED",
+  "RETRIEVAL_ASSIGNED",
+  "PARK_RETRIEVED",
+  "SEAL_BROKEN",
+  "OVERDUE_FLAGGED",
+  "PARTNER_RECEIVED",
+  "DELIVERED",
+]);
+export type CustodyEventType = z.infer<typeof CustodyEventTypeSchema>;
+
+export const InterstatePlanSchema = z.object({
+  originState: z.string().min(2, "Origin state is required"),
+  destState: z.string().min(2, "Destination state is required"),
+  originPark: z.string().min(2).optional(),
+  destPark: z.string().min(2).optional(),
+  originRiderId: z.string().optional(),
+  destRiderId: z.string().optional(),
+});
+export type InterstatePlanInput = z.infer<typeof InterstatePlanSchema>;
+
+export const ParkDropoffSchema = z
+  .object({
+    originPark: z.string().min(2, "Origin park is required"),
+    destPark: z.string().min(2).optional(),
+    transportCompany: z.string().min(2, "Transport company is required"),
+    vehiclePlate: z.string().optional(),
+    vehicleDescription: z.string().optional(),
+    waybillNumber: z.string().min(2, "Waybill number is required"),
+    waybillPhotoUrl: z.string().min(4, "Waybill photo is required"),
+    sealNumber: z.string().optional(),
+    fareAmountNgn: z.number().min(0).optional(),
+    fareReceiptPhotoUrl: z.string().optional(),
+    photoUrls: z.array(z.string()).min(1, "At least one parcel photo is required"),
+    driverPhone: z.string().optional(),
+    driverNote: z.string().optional(),
+    departedAt: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  .refine((v) => (v.vehiclePlate ?? "").trim() !== "" || (v.vehicleDescription ?? "").trim() !== "", {
+    message: "Bus plate or description is required",
+    path: ["vehiclePlate"],
+  });
+export type ParkDropoffInput = z.infer<typeof ParkDropoffSchema>;
+
+export const RetrievalAssignSchema = z.object({
+  riderProfileId: z.string().min(2).optional(),
+  partnerName: z.string().min(2).optional(),
+  partnerDepot: z.string().min(2).optional(),
+});
+export type RetrievalAssignInput = z.infer<typeof RetrievalAssignSchema>;
+
+export const ParkRetrievedSchema = z.object({
+  photoUrls: z.array(z.string()).min(1, "Retrieval photo is required"),
+  sealCheck: SealCheckSchema,
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  note: z.string().optional(),
+});
+export type ParkRetrievedInput = z.infer<typeof ParkRetrievedSchema>;

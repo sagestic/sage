@@ -38,10 +38,11 @@ import {
   type OrderItem,
   type RiderItem,
 } from "../../lib/data/sage-repo";
+import InterstateTasks from "./interstate-tasks";
 
 export default function RiderPwaPage() {
   const orgId = "org_apex_logistics";
-  const [activeTab, setActiveTab] = React.useState<"active" | "deliveries" | "profile">("active");
+  const [activeTab, setActiveTab] = React.useState<"active" | "deliveries" | "interstate" | "profile">("active");
   const [rider, setRider] = React.useState<RiderItem | null>(null);
   const [assignedOrders, setAssignedOrders] = React.useState<OrderItem[]>([]);
   const [activeOrder, setActiveOrder] = React.useState<OrderItem | null>(null);
@@ -549,7 +550,28 @@ export default function RiderPwaPage() {
         )}
 
         {/* ============================================================== */}
-        {/* TAB 3: PROFILE & AVAILABILITY */}
+        {/* TAB 3: INTERSTATE PARK TASKS */}
+        {/* ============================================================== */}
+        {activeTab === "interstate" && rider && (
+          <div className="space-y-3 animate-in fade-in-50">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-sm font-bold text-white">Park Tasks</h2>
+              <span className="text-xs text-slate-400">Drop-off & retrieval</span>
+            </div>
+            <InterstateTasks
+              orgId={orgId}
+              riderId={rider.id}
+              onDone={(msg) => {
+                setToastMessage(msg);
+                loadData();
+                setTimeout(() => setToastMessage(null), 4000);
+              }}
+            />
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 4: PROFILE & AVAILABILITY */}
         {/* ============================================================== */}
         {activeTab === "profile" && rider && (
           <div className="space-y-4 animate-in fade-in-50">
@@ -652,7 +674,7 @@ export default function RiderPwaPage() {
       {/* MOBILE BOTTOM NAVIGATION BAR */}
       {/* ============================================================== */}
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-2 max-w-md mx-auto">
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-4 gap-1">
           <button
             type="button"
             onClick={() => setActiveTab("active")}
@@ -684,6 +706,19 @@ export default function RiderPwaPage() {
 
           <button
             type="button"
+            onClick={() => setActiveTab("interstate")}
+            className={`flex flex-col items-center justify-center py-2 px-3 rounded-xl transition-colors ${
+              activeTab === "interstate"
+                ? "bg-primary text-primary-foreground font-bold shadow-md"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <Package className="h-5 w-5 mb-0.5" />
+            <span className="text-[10px]">Park Tasks</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab("profile")}
             className={`flex flex-col items-center justify-center py-2 px-3 rounded-xl transition-colors ${
               activeTab === "profile"
@@ -692,7 +727,7 @@ export default function RiderPwaPage() {
             }`}
           >
             <User className="h-5 w-5 mb-0.5" />
-            <span className="text-[10px]">Profile & Shift</span>
+            <span className="text-[10px]">Profile</span>
           </button>
         </div>
       </div>

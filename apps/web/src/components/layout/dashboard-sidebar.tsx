@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
+  Bus,
   CheckCircle2,
   ChevronDown,
   Layers,
@@ -55,6 +56,11 @@ export function DashboardSidebar({
       title: "Orders",
       href: "/dashboard/orders",
       icon: Package,
+    },
+    {
+      title: "Interstate",
+      href: "/dashboard/interstate",
+      icon: Bus,
     },
     {
       title: "Riders & Fleet",

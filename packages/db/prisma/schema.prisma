@@ -88,6 +88,27 @@ enum RecommendationStatus {
   EXECUTED
 }
 
+enum LegType {
+  FIRST_MILE
+  LINEHAUL_BUS
+  LAST_MILE
+  PARTNER_HANDOFF
+}
+
+enum LegStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  OVERDUE
+  FAILED
+}
+
+enum SealCheck {
+  INTACT
+  BROKEN
+  NO_SEAL
+}
+
 model Organization {
   id          String   @id @default(cuid())
   name        String
@@ -101,6 +122,9 @@ model Organization {
   riderInvitations      RiderInvitation[]
   orders                Order[]
   deliveryAssignments   DeliveryAssignment[]
+  interstateLegs        InterstateLeg[]
+  custodyEvents         CustodyEvent[]
+  parks                 Park[]
   integrations          Integration[]
   apiCredentials        ApiCredential[]
   webhookSubscriptions  WebhookSubscription[]
@@ -162,6 +186,7 @@ model RiderProfile {
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user             User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
   assignments      DeliveryAssignment[]
+  interstateLegs   InterstateLeg[]
   incidents        Incident[]
 
   @@index([organizationId])
@@ -206,17 +231,106 @@ model Order {
   estimatedDeliveryAt DateTime?
   deliveredAt         DateTime?
   notes               String?
+  isInterstate        Boolean            @default(false)
+  originState         String?
+  destState           String?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
   organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments         DeliveryAssignment[]
+  interstateLegs      InterstateLeg[]
+  custodyEvents       CustodyEvent[]
   incidents           Incident[]
   recommendations     Recommendation[]
 
   @@unique([organizationId, orderNumber])
   @@index([organizationId])
   @@index([status])
+  @@index([isInterstate])
+}
+
+model InterstateLeg {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  orderId            String
+  sequenceIndex      Int       @default(0)
+  type               LegType
+  status             LegStatus @default(PENDING)
+  originPark         String?
+  destPark           String?
+  transportCompany   String?
+  vehiclePlate       String?
+  vehicleDescription String?
+  driverPhone        String?
+  driverNote         String?
+  waybillNumber      String?
+  waybillPhotoUrl    String?
+  sealNumber         String?
+  sealCheck          SealCheck?
+  fareAmountNgn      Int?
+  fareReceiptPhotoUrl String?
+  droppedAt          DateTime?
+  departedAt         DateTime?
+  expectedArrivalAt  DateTime?
+  retrievedAt        DateTime?
+  riderProfileId     String?
+  partnerName        String?
+  partnerDepot       String?
+  photoUrls          String[]
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order              Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  riderProfile       RiderProfile? @relation(fields: [riderProfileId], references: [id], onDelete: SetNull)
+  custodyEvents      CustodyEvent[]
+
+  @@index([organizationId])
+  @@index([orderId])
+  @@index([status])
+}
+
+model CustodyEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  orderId        String
+  legId          String?
+  eventType      String
+  actorType      String   @default("SYSTEM")
+  actorId        String?
+  latitude       Float?
+  longitude      Float?
+  photoUrls      String[]
+  note           String?
+  createdAt      DateTime @default(now())
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  leg            InterstateLeg?  @relation(fields: [legId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([orderId])
+  @@index([legId])
+}
+
+model Park {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  city           String
+  state          String
+  address        String?
+  notes          String?
+  useCount       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name, city])
+  @@index([organizationId])
 }
 
 model DeliveryAssignment {
