@@ -68,8 +68,12 @@ export default function OrdersPage() {
     if (res.assignedCount === 0) {
       setSuccessNotice("No pending orders or no available couriers with capacity.");
     } else {
+      const kmSaved = res.matches.reduce((sum, m) => sum + (m.kmSaved || 0), 0);
+      const consolidatedCount = res.matches.filter(
+        (m) => m.type !== "INDEPENDENT_DISPATCH",
+      ).length;
       setSuccessNotice(
-        `Autonomously dispatched ${res.assignedCount} pending orders to available couriers!`,
+        `Autonomously dispatched ${res.assignedCount} pending orders! ${consolidatedCount} consolidated on shared corridors, saving ~${kmSaved.toFixed(1)} km!`,
       );
     }
     loadData();
@@ -121,9 +125,19 @@ export default function OrdersPage() {
       },
     });
 
+    // Run automatic corridor dispatch on newly ingested order
+    const dispatchRes = sageRepo.autoDispatchPendingOrders(orgId);
+    const matched = dispatchRes.matches.find(
+      (m) => m.orderNumber === created.order.orderNumber,
+    );
+
     setWhatsAppModalOpen(false);
+    const dispatchNote = matched
+      ? ` • Assigned to ${matched.riderName}${matched.kmSaved > 0 ? ` (Corridor overlap saved ~${matched.kmSaved} km)` : ""}`
+      : "";
+
     setSuccessNotice(
-      `Ingested order ${created.order.orderNumber} from WhatsApp chat for ${name}. Live tracking active.`,
+      `Ingested order ${created.order.orderNumber} from WhatsApp chat for ${name}${dispatchNote}. Live tracking at /track/${created.order.orderNumber}`,
     );
     loadData();
     setTimeout(() => setSuccessNotice(null), 5000);
@@ -168,8 +182,8 @@ export default function OrdersPage() {
 
   const handleAssignRider = (orderId: string) => {
     if (!assignRiderId) return;
-    sageRepo.assignRider(orgId, orderId, assignRiderId);
-    setSuccessNotice(`Assigned courier to delivery order.`);
+    sageRepo.reassignRider(orgId, orderId, assignRiderId, "Manual dispatch assignment / transfer");
+    setSuccessNotice(`Assigned/Transferred courier for delivery order.`);
     setAssignRiderId("");
     setSelectedOrder(null);
     loadData();

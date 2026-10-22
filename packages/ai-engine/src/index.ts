@@ -7,4 +7,5 @@ export * from "./incident";
 export * from "./ai-orchestration";
 export * from "./gemini";
 export * from "./road-optimizer";
+export * from "./corridor-optimizer";
 export * from "./or-tools/index";

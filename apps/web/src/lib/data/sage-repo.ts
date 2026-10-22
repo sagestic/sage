@@ -16,6 +16,11 @@ import type {
   VehicleType,
   WebhookEvent,
 } from "@sage/site-schema";
+import {
+  evaluateCorridorConsolidation,
+  type ActiveCourierRoute,
+  type ActiveCourierOrder,
+} from "@sage/ai-engine";
 
 export interface OrderItem {
   id: string;
@@ -44,6 +49,13 @@ export interface OrderItem {
   estimatedDeliveryAt: string;
   deliveredAt?: string;
   notes?: string;
+  consolidationType?: "DIRECT_CONSOLIDATION" | "INTERCEPTION_RELAY" | "INDEPENDENT_DISPATCH";
+  consolidatedWithOrderId?: string;
+  consolidationNotes?: string;
+  handoverFromRiderId?: string;
+  handoverFromRiderName?: string;
+  rendezvousPoint?: { name: string; lat: number; lng: number };
+  estimatedKmSaved?: number;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -889,24 +901,136 @@ class SageDataStore {
     return true;
   }
 
-  // Autonomous Fleet Auto-Dispatch (Matches pending orders to available riders)
+  // Inter-Rider Reassignment (transfers an order from one rider to another)
+  reassignRider(orgId: string, orderId: string, targetRiderId: string, reason?: string): boolean {
+    const order = this.getOrder(orgId, orderId);
+    const targetRider = this.getRider(orgId, targetRiderId);
+    if (!order || !targetRider) return false;
+
+    const previousRiderId = order.assignedRiderId;
+    const previousRider = previousRiderId ? this.getRider(orgId, previousRiderId) : undefined;
+
+    if (previousRider) {
+      previousRider.activeOrderCount = Math.max(0, previousRider.activeOrderCount - 1);
+      if (previousRider.activeOrderCount === 0) {
+        previousRider.status = "AVAILABLE";
+      }
+    }
+
+    order.assignedRiderId = targetRider.id;
+    order.assignedRiderName = targetRider.name;
+    order.assignedRiderVehicle = targetRider.vehicleType;
+    order.updatedAt = new Date().toISOString();
+
+    targetRider.activeOrderCount += 1;
+    targetRider.status = "BUSY";
+
+    const details = reason
+      ? `Reassigned order ${order.orderNumber} from ${previousRider?.name || "none"} to ${targetRider.name}. Reason: ${reason}`
+      : `Reassigned order ${order.orderNumber} to ${targetRider.name}`;
+
+    this.logAudit(
+      orgId,
+      "Autonomous Corridor Dispatcher",
+      "SYSTEM",
+      "RIDER_REASSIGNED",
+      "ORDER",
+      orderId,
+      details,
+    );
+
+    this.dispatchWebhookEvent(orgId, "delivery.assigned", {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      riderId: targetRider.id,
+      riderName: targetRider.name,
+      previousRiderId: previousRider?.id,
+    });
+
+    return true;
+  }
+
+  // Physical Custody Handover / Interception Relay
+  recordHandover(
+    orgId: string,
+    orderId: string,
+    fromRiderId: string,
+    toRiderId: string,
+    rendezvousName?: string,
+    notes?: string,
+  ): boolean {
+    const order = this.getOrder(orgId, orderId);
+    const fromRider = this.getRider(orgId, fromRiderId);
+    const toRider = this.getRider(orgId, toRiderId);
+    if (!order || !fromRider || !toRider) return false;
+
+    fromRider.activeOrderCount = Math.max(0, fromRider.activeOrderCount - 1);
+    if (fromRider.activeOrderCount === 0) {
+      fromRider.status = "AVAILABLE";
+    }
+
+    order.handoverFromRiderId = fromRider.id;
+    order.handoverFromRiderName = fromRider.name;
+    order.assignedRiderId = toRider.id;
+    order.assignedRiderName = toRider.name;
+    order.assignedRiderVehicle = toRider.vehicleType;
+    order.status = "IN_TRANSIT";
+    order.updatedAt = new Date().toISOString();
+
+    toRider.activeOrderCount += 1;
+    toRider.status = "BUSY";
+
+    const handoverDetails = `Physical custody handover: ${fromRider.name} transferred parcel to ${toRider.name} at ${rendezvousName || "Corridor Rendezvous"}. ${notes || ""}`;
+    order.notes = order.notes ? `${order.notes} | ${handoverDetails}` : handoverDetails;
+
+    this.logAudit(
+      orgId,
+      "Rider PWA / Corridor Intercept",
+      "COURIER",
+      "ORDER_HANDOVER_EXECUTED",
+      "ORDER",
+      orderId,
+      handoverDetails,
+    );
+
+    this.dispatchWebhookEvent(orgId, "delivery.status_updated", {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      status: "IN_TRANSIT",
+      handoverFrom: fromRider.name,
+      handoverTo: toRider.name,
+      rendezvousName,
+    });
+
+    return true;
+  }
+
+  // Autonomous Fleet Auto-Dispatch with Intelligent Corridor Overlap & Interception Detection
   autoDispatchPendingOrders(orgId: string): {
     assignedCount: number;
     unassignedCount: number;
-    matches: Array<{ orderNumber: string; riderName: string }>;
+    matches: Array<{
+      orderNumber: string;
+      riderName: string;
+      type: "DIRECT_CONSOLIDATION" | "INTERCEPTION_RELAY" | "INDEPENDENT_DISPATCH";
+      kmSaved: number;
+      reason?: string;
+    }>;
   } {
     const pendingOrders = this.orders.filter(
       (o) => o.organizationId === orgId && o.status === "PENDING",
     );
-    const availableRiders = this.riders.filter(
-      (r) =>
-        r.organizationId === orgId &&
-        (r.status === "AVAILABLE" || (r.status === "BUSY" && r.activeOrderCount < 3)),
-    );
+    const tenantRiders = this.riders.filter((r) => r.organizationId === orgId);
 
-    const matches: Array<{ orderNumber: string; riderName: string }> = [];
+    const matches: Array<{
+      orderNumber: string;
+      riderName: string;
+      type: "DIRECT_CONSOLIDATION" | "INTERCEPTION_RELAY" | "INDEPENDENT_DISPATCH";
+      kmSaved: number;
+      reason?: string;
+    }> = [];
 
-    if (availableRiders.length === 0 || pendingOrders.length === 0) {
+    if (tenantRiders.length === 0 || pendingOrders.length === 0) {
       return {
         assignedCount: 0,
         unassignedCount: pendingOrders.length,
@@ -914,28 +1038,104 @@ class SageDataStore {
       };
     }
 
-    let riderIndex = 0;
+    // Process each pending order using Corridor Overlap & Coincidence Detection
     for (const order of pendingOrders) {
-      if (availableRiders.length === 0) break;
-      const rider = availableRiders[riderIndex % availableRiders.length];
+      // Build active courier representations with their active orders
+      const activeCouriers: ActiveCourierRoute[] = tenantRiders.map((r) => {
+        const ridersActiveOrders = this.orders.filter(
+          (o) => o.organizationId === orgId && o.assignedRiderId === r.id && (o.status === "ASSIGNED" || o.status === "IN_TRANSIT"),
+        );
 
-      this.assignRider(orgId, order.id, rider.id);
-      matches.push({
-        orderNumber: order.orderNumber,
-        riderName: rider.name,
+        const currentOrders: ActiveCourierOrder[] = ridersActiveOrders.map((o) => ({
+          id: o.id,
+          orderNumber: o.orderNumber,
+          pickupAddress: o.pickupAddress,
+          pickup: { lat: o.pickupLat || 6.5244, lng: o.pickupLng || 3.3792 },
+          deliveryAddress: o.deliveryAddress,
+          delivery: { lat: o.deliveryLat || 6.4281, lng: o.deliveryLng || 3.4219 },
+          status: o.status === "IN_TRANSIT" ? "IN_TRANSIT" : "ASSIGNED",
+        }));
+
+        return {
+          riderId: r.id,
+          riderName: r.name,
+          currentLocation: { lat: r.currentLatitude, lng: r.currentLongitude },
+          vehicleCapacityKg: r.vehicleType === "VAN" ? 60 : 25,
+          currentLoadKg: r.activeOrderCount * 4,
+          status: r.status === "OFFLINE" ? "OFFLINE" : (r.activeOrderCount >= 4 ? "BUSY" : "AVAILABLE"),
+          activeOrders: currentOrders,
+        };
       });
 
-      riderIndex++;
+      const candidate = {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        pickupAddress: order.pickupAddress,
+        pickup: { lat: order.pickupLat || 6.5244, lng: order.pickupLng || 3.3792 },
+        deliveryAddress: order.deliveryAddress,
+        delivery: { lat: order.deliveryLat || 6.4281, lng: order.deliveryLng || 3.4219 },
+        weightKg: order.packageWeightKg || 3,
+      };
+
+      const decision = evaluateCorridorConsolidation(candidate, activeCouriers);
+
+      if (decision.type === "DIRECT_CONSOLIDATION") {
+        this.assignRider(orgId, order.id, decision.primaryRiderId);
+        order.consolidationType = "DIRECT_CONSOLIDATION";
+        order.consolidatedWithOrderId = decision.sharedWithOrderNumber;
+        order.consolidationNotes = decision.reason;
+        order.estimatedKmSaved = decision.estimatedKmSaved;
+
+        matches.push({
+          orderNumber: order.orderNumber,
+          riderName: decision.primaryRiderName,
+          type: "DIRECT_CONSOLIDATION",
+          kmSaved: decision.estimatedKmSaved,
+          reason: decision.reason,
+        });
+      } else if (decision.type === "INTERCEPTION_RELAY") {
+        // Interception Relay: Primary rider delivers both, secondary rider executes local pickup & handover
+        this.assignRider(orgId, order.id, decision.primaryRiderId);
+        order.consolidationType = "INTERCEPTION_RELAY";
+        order.handoverFromRiderId = decision.secondaryRiderId;
+        order.handoverFromRiderName = decision.secondaryRiderName;
+        order.rendezvousPoint = decision.rendezvousPoint;
+        order.consolidationNotes = decision.reason;
+        order.estimatedKmSaved = decision.estimatedKmSaved;
+
+        matches.push({
+          orderNumber: order.orderNumber,
+          riderName: `${decision.primaryRiderName} (Intercept from ${decision.secondaryRiderName})`,
+          type: "INTERCEPTION_RELAY",
+          kmSaved: decision.estimatedKmSaved,
+          reason: decision.reason,
+        });
+      } else {
+        // Standard independent dispatch
+        if (decision.primaryRiderId && decision.primaryRiderId !== "rdr_unassigned") {
+          this.assignRider(orgId, order.id, decision.primaryRiderId);
+          order.consolidationType = "INDEPENDENT_DISPATCH";
+          matches.push({
+            orderNumber: order.orderNumber,
+            riderName: decision.primaryRiderName,
+            type: "INDEPENDENT_DISPATCH",
+            kmSaved: 0,
+            reason: decision.reason,
+          });
+        }
+      }
     }
+
+    const totalKmSaved = matches.reduce((sum, m) => sum + (m.kmSaved || 0), 0);
 
     this.logAudit(
       orgId,
-      "Autonomous Dispatch Engine",
+      "Autonomous Corridor Engine",
       "SYSTEM",
       "AUTONOMOUS_FLEET_DISPATCH",
       "DISPATCH_BATCH",
       `batch_${Date.now()}`,
-      `Autonomously dispatched ${matches.length} orders across ${availableRiders.length} available couriers.`,
+      `Autonomously dispatched ${matches.length} orders. Corridor consolidations saved an estimated ${totalKmSaved.toFixed(1)} km of fleet travel.`,
     );
 
     return {

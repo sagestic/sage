@@ -1,4 +1,4 @@
-import type { Location } from "./types.ts";
+import type { Location } from "./types";
 
 export function distanceKm(a: Location, b: Location): number {
   const rad = Math.PI / 180;

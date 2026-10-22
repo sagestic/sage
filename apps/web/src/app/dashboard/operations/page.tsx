@@ -57,10 +57,15 @@ export default function LiveOperationsPage() {
 
   const handleManualAssign = () => {
     if (!selectedOrder || !reassignRiderId) return;
-    sageRepo.assignRider(orgId, selectedOrder.id, reassignRiderId);
+    sageRepo.reassignRider(
+      orgId,
+      selectedOrder.id,
+      reassignRiderId,
+      "Dispatcher manual reassignment / corridor coordination",
+    );
     const rider = riders.find((r) => r.id === reassignRiderId);
     setActionNotice(
-      `Assigned ${selectedOrder.orderNumber} to ${rider?.name || "courier"}. Live map updated.`,
+      `Reassigned ${selectedOrder.orderNumber} to ${rider?.name || "courier"}. Live itinerary updated.`,
     );
     loadData();
     setTimeout(() => setActionNotice(null), 4000);
@@ -71,8 +76,12 @@ export default function LiveOperationsPage() {
     if (res.assignedCount === 0) {
       setActionNotice("No pending orders or no available couriers with capacity.");
     } else {
+      const kmSaved = res.matches.reduce((sum, m) => sum + (m.kmSaved || 0), 0);
+      const consolidatedCount = res.matches.filter(
+        (m) => m.type !== "INDEPENDENT_DISPATCH",
+      ).length;
       setActionNotice(
-        `Autonomous Dispatch: Assigned ${res.assignedCount} pending orders across fleet!`,
+        `Autonomous Dispatch: Assigned ${res.assignedCount} orders across fleet. ${consolidatedCount} consolidated on coinciding corridors, saving ~${kmSaved.toFixed(1)} km!`,
       );
     }
     loadData();
@@ -241,6 +250,38 @@ export default function LiveOperationsPage() {
                     {selectedOrder.assignedRiderName || "None (Unassigned)"}
                   </span>
                 </div>
+
+                {selectedOrder.consolidationType === "DIRECT_CONSOLIDATION" && (
+                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-700 dark:text-emerald-300">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <span>⚡ Coinciding Corridor Consolidation</span>
+                      {selectedOrder.estimatedKmSaved && (
+                        <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px]">
+                          Saved {selectedOrder.estimatedKmSaved} km
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] mt-1 text-muted-foreground leading-relaxed">
+                      {selectedOrder.consolidationNotes}
+                    </div>
+                  </div>
+                )}
+
+                {selectedOrder.consolidationType === "INTERCEPTION_RELAY" && (
+                  <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 text-xs text-sky-700 dark:text-sky-300">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <span>🔄 Interception Relay Active</span>
+                      {selectedOrder.estimatedKmSaved && (
+                        <span className="rounded bg-sky-500/20 px-1.5 py-0.2 text-[10px]">
+                          Saved {selectedOrder.estimatedKmSaved} km
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] mt-1 text-muted-foreground leading-relaxed">
+                      {selectedOrder.consolidationNotes}
+                    </div>
+                  </div>
+                )}
 
                 {/* Dispatch Intervention */}
                 <div className="pt-2 space-y-2">

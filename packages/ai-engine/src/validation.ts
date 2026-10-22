@@ -1,4 +1,4 @@
-import type { RecoveryRequest } from "./types.ts";
+import type { RecoveryRequest } from "./types";
 
 const finite = (n: number) => Number.isFinite(n);
 const validLocation = (p: { lat: number; lng: number }) =>

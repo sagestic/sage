@@ -1,4 +1,4 @@
-import type { Incident } from "./types.ts";
+import type { Incident } from "./types";
 
 export interface IncidentInterpretation {
   incident: Incident;

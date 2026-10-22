@@ -17,6 +17,7 @@ import {
   Send,
   ShieldAlert,
   User,
+  Zap,
 } from "lucide-react";
 import {
   Badge,
@@ -103,6 +104,23 @@ export default function RiderPwaPage() {
       sageRepo.updateOrderStatus(orgId, activeOrder.id, "DELIVERED");
       setToastMessage("Order delivered successfully! Good work.");
     }
+    loadData();
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const handleConfirmHandover = () => {
+    if (!rider || !activeOrder || !activeOrder.handoverFromRiderId) return;
+    sageRepo.recordHandover(
+      orgId,
+      activeOrder.id,
+      activeOrder.handoverFromRiderId,
+      rider.id,
+      activeOrder.rendezvousPoint?.name || "Transit Rendezvous Point",
+      "Confirmed physical receipt via Rider PWA",
+    );
+    setToastMessage(
+      `Accepted parcel handover from ${activeOrder.handoverFromRiderName || "courier"}. Heading to final recipient!`,
+    );
     loadData();
     setTimeout(() => setToastMessage(null), 4000);
   };
@@ -220,6 +238,53 @@ export default function RiderPwaPage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Corridor Consolidation & Interception Highlights */}
+                {activeOrder.consolidationType === "DIRECT_CONSOLIDATION" && (
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/70 p-3 text-xs text-emerald-200 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5 text-emerald-400">
+                      <Zap className="h-4 w-4" />
+                      <span>Coinciding Corridor Consolidation</span>
+                      {activeOrder.estimatedKmSaved && (
+                        <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-300 font-mono">
+                          Saved ~{activeOrder.estimatedKmSaved} km
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-emerald-300/80 leading-relaxed">
+                      You are delivering this package alongside order {activeOrder.consolidatedWithOrderId} to the same destination sector.
+                    </div>
+                  </div>
+                )}
+
+                {activeOrder.consolidationType === "INTERCEPTION_RELAY" && (
+                  <div className="rounded-xl border border-sky-500/30 bg-sky-950/70 p-3 text-xs text-sky-200 space-y-2.5">
+                    <div className="font-bold flex items-center justify-between text-sky-400">
+                      <div className="flex items-center gap-1.5">
+                        <Navigation className="h-4 w-4" />
+                        <span>Corridor Interception Relay</span>
+                      </div>
+                      {activeOrder.estimatedKmSaved && (
+                        <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] text-sky-300 font-mono">
+                          Saved ~{activeOrder.estimatedKmSaved} km
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-sky-200/80 leading-relaxed">
+                      Rendezvous with courier <strong className="text-white">{activeOrder.handoverFromRiderName || "partner courier"}</strong> at <strong className="text-sky-300">{activeOrder.rendezvousPoint?.name || "Transit Rendezvous Point"}</strong> to receive parcel into topbox.
+                    </div>
+                    {activeOrder.handoverFromRiderId && (
+                      <Button
+                        size="sm"
+                        className="w-full h-8 text-xs bg-sky-600 hover:bg-sky-500 text-white font-bold gap-1.5"
+                        onClick={handleConfirmHandover}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Confirm Parcel Handover Received
+                      </Button>
+                    )}
                   </div>
                 )}
 

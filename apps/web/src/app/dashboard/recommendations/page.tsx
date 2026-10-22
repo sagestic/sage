@@ -68,6 +68,23 @@ export default function RecommendationsPage() {
     }, 1200);
   };
 
+  const handleRunCorridorScanner = () => {
+    const res = sageRepo.autoDispatchPendingOrders(orgId);
+    const kmSaved = res.matches.reduce((sum, m) => sum + (m.kmSaved || 0), 0);
+    const consolidated = res.matches.filter((m) => m.type !== "INDEPENDENT_DISPATCH");
+    if (consolidated.length > 0) {
+      setActionNotice(
+        `Corridor Overlap Engine: Consolidated ${consolidated.length} coinciding orders across active routes! Saved an estimated ${kmSaved.toFixed(1)} km of fleet travel.`,
+      );
+    } else {
+      setActionNotice(
+        `Corridor Overlap Engine evaluated all routes: No co-directional overlap or all couriers at capacity.`,
+      );
+    }
+    loadData();
+    setTimeout(() => setActionNotice(null), 5000);
+  };
+
   const handleRunOrToolsVrp = async () => {
     setIsSolvingVrp(true);
     try {
@@ -116,6 +133,16 @@ export default function RecommendationsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleRunCorridorScanner}
+            className="gap-1.5 text-xs border-sky-500/40 text-sky-700 dark:text-sky-300 hover:bg-sky-500/10"
+          >
+            <Navigation className="h-3.5 w-3.5 text-sky-500" />
+            Consolidate Corridors
+          </Button>
+
           <Button
             size="sm"
             variant="outline"
