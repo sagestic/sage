@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Recovery requires valid order and rider coordinates" }, { status: 422 });
 
   // No persistent, verified custody event is wired yet. Fail closed for in-transit parcels.
-  const readiness = evaluateRecoveryReadiness(affected, new Map());
+  const readiness = evaluateRecoveryReadiness(affected.map(o => ({ id: o.id, status: o.status === "IN_TRANSIT" ? "IN_TRANSIT" as const : "ASSIGNED" as const })), new Map());
   const problem: VrpProblemRequest = {
     // Provisional depot: first affected pickup. Not a verified handover location.
     depot: { latitude: affected[0].pickupLat!, longitude: affected[0].pickupLng! },
