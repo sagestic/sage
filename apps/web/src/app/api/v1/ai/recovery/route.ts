@@ -84,7 +84,8 @@ export async function POST(req: NextRequest) {
       caveats: ["Distances are solver estimates, not guaranteed live road ETAs.", "The first affected pickup is a provisional depot, not a verified parcel handover location.", "Orders already in transit may require a physical handover before reassignment."],
       applied: false, requiresDispatcherApproval: true,
     });
-  } catch {
+  } catch (error) {
+    if (process.env.NODE_ENV === "development") console.error("[recovery] VRP preview failed:", error);
     return NextResponse.json({ error: "No validated safe recovery preview available", interpretation, applied: false }, { status: 422 });
   }
 }
