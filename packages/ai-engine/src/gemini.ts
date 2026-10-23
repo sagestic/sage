@@ -46,7 +46,22 @@ export function createGeminiIncidentInterpreter(config: GeminiConfig): IncidentI
         }),
       });
     } catch { throw new Error("Gemini request failed or timed out"); }
-    if (!response.ok) throw new Error(`Gemini returned HTTP ${response.status}`);
+    if (!response.ok) {
+      // Google's JSON error message identifies unsupported schema fields, model
+      // restrictions and invalid request parameters. Never log request headers.
+      let reason = "";
+      try {
+        const errorBody: unknown = await response.json();
+        const message = (errorBody as { error?: { message?: unknown; status?: unknown } })?.error;
+        const status = typeof message?.status === "string" ? message.status : "";
+        const detail = typeof message?.message === "string" ? message.message : "";
+        // Bound diagnostics and redact credential-shaped values before logging.
+        reason = [status, detail].filter(Boolean).join(": ")
+          .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[REDACTED_KEY]")
+          .slice(0, 600);
+      } catch { /* Do not expose arbitrary response bodies. */ }
+      throw new Error(`Gemini returned HTTP ${response.status}${reason ? `: ${reason}` : ""}`);
+    }
     let payload: unknown;
     try { payload = await response.json(); } catch { throw new Error("Invalid Gemini response JSON"); }
     const candidate = payload as { candidates?: { content?: { parts?: { text?: string }[] } }[] };

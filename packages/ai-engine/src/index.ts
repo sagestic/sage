@@ -13,3 +13,4 @@ export * from "./vrp-validation";
 
 export * from "./recovery-governance";
 export * from "./recovery-road-evidence";
+export * from "./vertex";

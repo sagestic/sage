@@ -46,7 +46,9 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y openssl ca-certificates python3 python3-pip python3-venv && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/sage-python && /opt/sage-python/bin/pip install --no-cache-dir "ortools>=9.10,<10"
+ENV PATH="/opt/sage-python/bin:$PATH"
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
@@ -54,6 +56,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 
+# The API spawns this script from the monorepo-relative path.
+COPY --from=builder --chown=nextjs:nodejs /app/packages/ai-engine/src/or-tools/vrp_solver.py ./packages/ai-engine/src/or-tools/vrp_solver.py
 USER nextjs
 
 EXPOSE 3000
