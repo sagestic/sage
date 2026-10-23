@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createGeminiIncidentInterpreter, validateIncidentOutput, evaluateRecoveryReadiness, requireValidVrpSolution, type VrpProblemRequest } from "@sage/ai-engine";
+import { createGeminiIncidentInterpreter, validateIncidentOutput, evaluateRecoveryReadiness, selectRecoveryDistanceEvidence, requireValidVrpSolution, type VrpProblemRequest } from "@sage/ai-engine";
 import { authenticateApiRequest } from "../../../../../lib/api/auth";
 import { sageRepo } from "../../../../../lib/data/sage-repo";
 import { solveVrpWithGoogleOrTools } from "../../../../../lib/optimization/google-or-solver";
@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
       readinessReasons: readiness.reasons,
       affectedOrders: affected.map(o => ({ id: o.id, orderNumber: o.orderNumber, status: o.status })),
       recommendation: solution,
+      distanceEvidence: selectRecoveryDistanceEvidence(solution.totalDistanceMeters, undefined),
       explanation: `Rider ${brokenRider.name} was reported unavailable. Sage evaluated ${affected.length} active assigned deliveries against ${available.length} available replacement riders. Review the proposed routes and confirm the physical parcel handover before taking action. This preview has not changed any assignments.`,
       caveats: ["Distances are solver estimates, not guaranteed live road ETAs.", "The first affected pickup is a provisional depot, not a verified parcel handover location.", "Orders already in transit may require a physical handover before reassignment."],
       applied: false, requiresDispatcherApproval: true,
