@@ -10,3 +10,5 @@ export * from "./road-optimizer";
 export * from "./corridor-optimizer";
 export * from "./or-tools/index";
 export * from "./vrp-validation";
+
+export * from "./recovery-governance";
