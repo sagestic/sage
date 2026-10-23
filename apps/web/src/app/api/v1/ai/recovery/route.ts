@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createGeminiIncidentInterpreter, validateIncidentOutput, requireValidVrpSolution, type VrpProblemRequest } from "@sage/ai-engine";
+import { createGeminiIncidentInterpreter, validateIncidentOutput, evaluateRecoveryReadiness, selectRecoveryDistanceEvidence, requireValidVrpSolution, type VrpProblemRequest } from "@sage/ai-engine";
 import { authenticateApiRequest } from "../../../../../lib/api/auth";
 import { sageRepo } from "../../../../../lib/data/sage-repo";
 import { solveVrpWithGoogleOrTools } from "../../../../../lib/optimization/google-or-solver";
@@ -63,6 +63,8 @@ export async function POST(req: NextRequest) {
       available.some(r => !validCoord(r.currentLatitude, 90) || !validCoord(r.currentLongitude, 180)))
     return NextResponse.json({ error: "Recovery requires valid order and rider coordinates" }, { status: 422 });
 
+  // No persistent, verified custody event is wired yet. Fail closed for in-transit parcels.
+  const readiness = evaluateRecoveryReadiness(affected.map(o => ({ id: o.id, status: o.status === "IN_TRANSIT" ? "IN_TRANSIT" as const : "ASSIGNED" as const })), new Map());
   const problem: VrpProblemRequest = {
     // Provisional depot: first affected pickup. Not a verified handover location.
     depot: { latitude: affected[0].pickupLat!, longitude: affected[0].pickupLng! },
@@ -78,8 +80,12 @@ export async function POST(req: NextRequest) {
     const solution = requireValidVrpSolution(problem, await solveVrpWithGoogleOrTools(problem));
     return NextResponse.json({
       success: true, interpretation, simulation: mockMode,
+      actionable: readiness.actionable,
+      blockedOrderIds: readiness.blockedOrderIds,
+      readinessReasons: readiness.reasons,
       affectedOrders: affected.map(o => ({ id: o.id, orderNumber: o.orderNumber, status: o.status })),
       recommendation: solution,
+      distanceEvidence: selectRecoveryDistanceEvidence(solution.totalDistanceMeters, undefined),
       explanation: `Rider ${brokenRider.name} was reported unavailable. Sage evaluated ${affected.length} active assigned deliveries against ${available.length} available replacement riders. Review the proposed routes and confirm the physical parcel handover before taking action. This preview has not changed any assignments.`,
       caveats: ["Distances are solver estimates, not guaranteed live road ETAs.", "The first affected pickup is a provisional depot, not a verified parcel handover location.", "Orders already in transit may require a physical handover before reassignment."],
       applied: false, requiresDispatcherApproval: true,

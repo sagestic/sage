@@ -487,3 +487,54 @@ model AuditEvent {
   @@index([organizationId])
   @@index([createdAt])
 }
+
+
+// Durable recovery review ledger. Application code must use tenant-scoped lookups,
+// optimistic version checks and transactions before changing any order assignments.
+// Schema only: this PR does not activate database writes.
+model RecoveryProposal {
+  id               String   @id @default(cuid())
+  organizationId   String
+  incidentId       String?
+  affectedOrderIds String[]
+  recommendation   Json
+  status           String   @default("PENDING")
+  version          Int      @default(0)
+  reviewedById     String?
+  reviewedAt       DateTime?
+  executedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, incidentId])
+}
+
+model RecoveryCustodyVerification {
+  id             String   @id @default(cuid())
+  organizationId String
+  orderId        String
+  eventId        String
+  handoverLat    Float
+  handoverLng    Float
+  confirmedById  String
+  confirmedAt    DateTime
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, eventId])
+  @@index([organizationId, orderId])
+}
+
+model RecoveryDecisionAudit {
+  id             String   @id @default(cuid())
+  organizationId String
+  proposalId     String
+  actorId        String
+  action         String
+  fromStatus     String
+  toStatus       String
+  version        Int
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, proposalId, createdAt])
+}
