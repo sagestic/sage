@@ -59,9 +59,13 @@ def solve_vrp(problem_data):
     if not vehicles or not deliveries:
         return {
             "status": "NO_WORK_OR_VEHICLES",
-            "total_distance_meters": 0,
+            "solver": "Google OR-Tools (CVRP + PDP)",
+            "totalDistanceMeters": 0,
+            "totalDistanceKm": 0,
+            "assignedOrdersCount": 0,
+            "unassignedOrdersCount": len(deliveries),
             "routes": [],
-            "unassigned_orders": [d["id"] for d in deliveries]
+            "unassignedOrderIds": [d["id"] for d in deliveries]
         }
 
     # Node 0 is Depot
