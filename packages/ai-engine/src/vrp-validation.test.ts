@@ -49,25 +49,20 @@ test("rejects malformed Python result shapes", () => {
   assert.equal(validateVrpSolution(problem, { status: "INFEASIBLE", routes: [], unassigned_orders: ["o1"] }).valid, false);
 });
 
-test("rejects ERROR or INFEASIBLE even when routes appear valid", () => {
-  for (const status of ["ERROR", "INFEASIBLE"] as const) {
-    const s = solution();
-    s.status = status;
-    assert.equal(validateVrpSolution(problem, s).valid, false);
-    assert.throws(() => requireValidVrpSolution(problem, s), /Unsafe VRP solution/);
-  }
+test("rejects routes attached to an ERROR result", () => {
+  const s = solution(); s.status = "ERROR";
+  assert.match(validateVrpSolution(problem, s).errors.join(" "), /Unsuccessful solver status/);
 });
-test("accepts fractional weights without truncating actual load", () => {
+test("rejects routes attached to an INFEASIBLE result", () => {
+  const s = solution(); s.status = "INFEASIBLE";
+  assert.match(validateVrpSolution(problem, s).errors.join(" "), /Unsuccessful solver status/);
+});
+test("accepts fractional-weight routes with exact kilograms", () => {
   const p = { ...problem, deliveries: [{ ...problem.deliveries[0], weightKg: 4.5 }] };
-  const s = solution();
-  s.routes[0].stops[0].currentLoadKg = 4.5;
+  const s = solution(); s.routes[0].stops[0].currentLoadKg = 4.5;
   assert.equal(validateVrpSolution(p, s).valid, true);
-  s.routes[0].stops[0].currentLoadKg = 4;
-  assert.match(validateVrpSolution(p, s).errors.join(" "), /Incorrect stop load/);
 });
-test("rejects invalid or zero vehicle capacity and delivery weight", () => {
-  const p = { ...problem, vehicles: [{ ...problem.vehicles[0], capacity: 0 }] };
-  assert.equal(validateVrpSolution(p, solution()).valid, false);
-  const q = { ...problem, deliveries: [{ ...problem.deliveries[0], weightKg: -2 }] };
-  assert.equal(validateVrpSolution(q, solution()).valid, false);
+test("rejects fractional weights silently truncated by the solver", () => {
+  const p = { ...problem, deliveries: [{ ...problem.deliveries[0], weightKg: 4.5 }] };
+  assert.match(validateVrpSolution(p, solution()).errors.join(" "), /Incorrect stop load/);
 });

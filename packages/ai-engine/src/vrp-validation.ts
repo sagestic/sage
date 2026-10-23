@@ -1,4 +1,4 @@
-import type { VrpProblemRequest, VrpSolution } from "./or-tools/index";
+import type { VrpProblemRequest, VrpSolution } from "./or-tools/index.ts";
 
 export interface VrpValidationResult {
   valid: boolean;
@@ -24,6 +24,8 @@ export function validateVrpSolution(problem: VrpProblemRequest, raw: unknown): V
     errors.push(`Solver returned non-dispatchable status: ${solution.status}`);
   if (!["OPTIMAL", "FEASIBLE", "INFEASIBLE", "ERROR"].includes(String(solution.status)))
     errors.push("Invalid solver status");
+  if (solution.status === "ERROR" || solution.status === "INFEASIBLE")
+    errors.push("Unsuccessful solver status cannot be used for assignments");
   if (!Array.isArray(solution.routes) || !Array.isArray(solution.unassignedOrderIds)) {
     errors.push("Solver result is missing routes or unassignedOrderIds");
     return empty();

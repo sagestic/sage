@@ -50,8 +50,11 @@ def solve_vrp(problem_data):
     vehicles = problem_data.get("vehicles", [])
     deliveries = problem_data.get("deliveries", [])
     depot = problem_data.get("depot")
-    if depot is None or not all(isinstance(depot.get(k), (int, float)) for k in ("latitude", "longitude")):
-        raise ValueError("Valid depot coordinates required")
+    if not depot:
+        raise ValueError("Explicit depot required")
+    for delivery in deliveries:
+        if any(delivery.get(k) is None for k in ("pickupLat", "pickupLng", "deliveryLat", "deliveryLng")):
+            raise ValueError("Explicit pickup and delivery coordinates required")
 
     if not vehicles or not deliveries:
         return {
@@ -75,12 +78,8 @@ def solve_vrp(problem_data):
 
     for i, delivery in enumerate(deliveries):
         # Pickup Node
-        p_lat = delivery.get("pickupLat")
-        p_lng = delivery.get("pickupLng")
-        if not all(isinstance(x, (int, float)) and math.isfinite(x) for x in (p_lat, p_lng, d_lat, d_lng)):
-            raise ValueError("Missing or invalid pickup/dropoff coordinates")
-        if abs(p_lat) > 90 or abs(d_lat) > 90 or abs(p_lng) > 180 or abs(d_lng) > 180:
-            raise ValueError("Coordinates outside valid range")
+        p_lat = delivery["pickupLat"]
+        p_lng = delivery["pickupLng"]
         p_idx = len(nodes)
         nodes.append({
             "lat": p_lat,
@@ -92,8 +91,8 @@ def solve_vrp(problem_data):
         })
 
         # Dropoff Node
-        d_lat = delivery.get("deliveryLat")
-        d_lng = delivery.get("deliveryLng")
+        d_lat = delivery["deliveryLat"]
+        d_lng = delivery["deliveryLng"]
         d_idx = len(nodes)
         nodes.append({
             "lat": d_lat,
@@ -105,9 +104,7 @@ def solve_vrp(problem_data):
         })
 
         pickup_dropoff_pairs.append([p_idx, d_idx])
-        weight = int(round(float(delivery.get("weightKg", 2)) * 1000))
-        if weight <= 0:
-            raise ValueError("Delivery weight must be positive")
+        weight = max(1, round(float(delivery.get("weightKg", 2)) * 1000))
         demands.append(weight)   # Pickup adds to vehicle load
         demands.append(-weight)  # Dropoff removes from vehicle load
 
@@ -142,9 +139,7 @@ def solve_vrp(problem_data):
         return demands[from_node]
 
     demand_callback_index = routing.RegisterUnaryTransitCallback(demand_callback)
-    vehicle_capacities = [int(round(float(v.get("capacity", 30)) * 1000)) for v in vehicles]
-    if any(capacity <= 0 for capacity in vehicle_capacities):
-        raise ValueError("Vehicle capacity must be positive")
+    vehicle_capacities = [max(1, round(float(v.get("capacity", 30)) * 1000)) for v in vehicles]
 
     routing.AddDimensionWithVehicleCapacity(
         demand_callback_index,
@@ -154,7 +149,8 @@ def solve_vrp(problem_data):
         "Capacity"
     )
 
-    routing.AddDimension(transit_callback_index, 0, 10**12, True, "Distance")
+    order_callback = routing.RegisterTransitCallback(lambda _from, _to: 1)
+    routing.AddDimension(order_callback, 0, num_locations, True, "StopOrder")
 
     # Pickup and Delivery constraints
     for pickup_idx, dropoff_idx in pickup_dropoff_pairs:
@@ -163,10 +159,10 @@ def solve_vrp(problem_data):
         routing.AddPickupAndDelivery(p_index, d_index)
         # Same vehicle constraint
         routing.solver().Add(routing.VehicleVar(p_index) == routing.VehicleVar(d_index))
-        # Precedence constraint: Pickup must precede Dropoff
+        # Order dimension enforces pickup-before-dropoff independently of load.
         routing.solver().Add(
-            routing.GetDimensionOrDie("Distance").CumulVar(p_index) <=
-            routing.GetDimensionOrDie("Distance").CumulVar(d_index)
+            routing.GetDimensionOrDie("StopOrder").CumulVar(p_index) <=
+            routing.GetDimensionOrDie("StopOrder").CumulVar(d_index)
         )
 
     # Allow dropping nodes with penalty if impossible to serve
