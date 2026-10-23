@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createGeminiIncidentInterpreter, validateIncidentOutput, evaluateRecoveryReadiness, selectRecoveryDistanceEvidence, requireValidVrpSolution, type VrpProblemRequest } from "@sage/ai-engine";
+import { createGeminiIncidentInterpreter, createVertexIncidentInterpreter, validateIncidentOutput, evaluateRecoveryReadiness, selectRecoveryDistanceEvidence, requireValidVrpSolution, type VrpProblemRequest } from "@sage/ai-engine";
 import { authenticateApiRequest } from "../../../../../lib/api/auth";
 import { sageRepo } from "../../../../../lib/data/sage-repo";
 import { solveVrpWithGoogleOrTools } from "../../../../../lib/optimization/google-or-solver";
@@ -22,8 +22,14 @@ export async function POST(req: NextRequest) {
 
   // Explicit development-only simulation; request bodies cannot enable it.
   const mockMode = process.env.NODE_ENV === "development" && process.env.SAGE_MOCK_GEMINI === "true";
+  const provider = process.env.SAGE_AI_PROVIDER ?? "gemini";
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!mockMode && !apiKey) return NextResponse.json({ error: "Gemini is not configured" }, { status: 503 });
+  if (!mockMode && provider !== "vertex" && provider !== "gemini")
+    return NextResponse.json({ error: "Unknown AI provider" }, { status: 503 });
+  if (!mockMode && provider === "gemini" && !apiKey)
+    return NextResponse.json({ error: "Gemini is not configured" }, { status: 503 });
+  if (!mockMode && provider === "vertex" && (!process.env.GOOGLE_CLOUD_PROJECT || !process.env.GOOGLE_CLOUD_LOCATION))
+    return NextResponse.json({ error: "Vertex AI project and location are required" }, { status: 503 });
   let interpretation;
   try {
     if (mockMode) {
@@ -35,7 +41,14 @@ export async function POST(req: NextRequest) {
         evidence: "Simulated fixture: explicitly reported rider breakdown",
       });
     } else {
-      interpretation = await createGeminiIncidentInterpreter({ apiKey: apiKey! }).interpret(crypto.randomUUID(), description);
+      interpretation = await (provider === "vertex"
+        ? createVertexIncidentInterpreter({
+            project: process.env.GOOGLE_CLOUD_PROJECT!,
+            location: process.env.GOOGLE_CLOUD_LOCATION!,
+            model: process.env.SAGE_VERTEX_MODEL ?? "gemini-2.5-flash",
+          })
+        : createGeminiIncidentInterpreter({ apiKey: apiKey! })
+      ).interpret(crypto.randomUUID(), description);
     }
   } catch (error) {
     if (process.env.NODE_ENV === "development") {
