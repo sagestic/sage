@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireValidVrpSolution } from "@sage/ai-engine";
 import { authenticateApiRequest } from "../../../../../lib/api/auth";
 import { sageRepo } from "../../../../../lib/data/sage-repo";
 import { solveVrpWithGoogleOrTools } from "../../../../../lib/optimization/google-or-solver";
@@ -9,7 +10,10 @@ export async function POST(req: NextRequest) {
 
   const orgId = auth.context.organizationId;
   const url = new URL(req.url);
-  const shouldApply = url.searchParams.get("apply") === "true";
+  // Phase 5 is preview-only until an authenticated, versioned approval flow exists.
+  if (url.searchParams.get("apply") === "true") {
+    return NextResponse.json({ success: false, error: "Direct application disabled. Dispatcher approval workflow required." }, { status: 409 });
+  }
 
   // Load active state from repository
   const pendingOrders = sageRepo.getOrders(orgId, "PENDING");
@@ -29,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   // Build problem definition
   const problem = {
-    depot: { latitude: 51.5074, longitude: -0.1278 },
+    depot: undefined,
     vehicles: availableRiders.map((r) => ({
       id: r.id,
       name: r.name,
@@ -51,24 +55,25 @@ export async function POST(req: NextRequest) {
     })),
   };
 
-  // Run Google OR-Tools optimization
-  const solution = await solveVrpWithGoogleOrTools(problem);
-
-  // If requested, apply assignments immediately
-  if (shouldApply && solution.routes.length > 0) {
-    for (const route of solution.routes) {
-      for (const stop of route.stops) {
-        if (stop.stopType === "PICKUP") {
-          sageRepo.assignRider(orgId, stop.orderId, route.vehicleId);
-        }
-      }
-    }
+  // Do not invent coordinates for an operational decision.
+  const coords = pendingOrders.flatMap(o => [o.pickupLat, o.pickupLng, o.deliveryLat, o.deliveryLng]);
+  if (coords.some(v => typeof v !== "number" || !Number.isFinite(v))) {
+    return NextResponse.json({ success: false, error: "Orders require valid geocoded pickup and delivery coordinates." }, { status: 422 });
+  }
+  const first = pendingOrders[0];
+  problem.depot = { latitude: first.pickupLat!, longitude: first.pickupLng! };
+  let solution;
+  try {
+    solution = requireValidVrpSolution(problem, await solveVrpWithGoogleOrTools(problem));
+  } catch (error) {
+    return NextResponse.json({ success: false, error: "No safe optimization preview available." }, { status: 422 });
   }
 
   return NextResponse.json({
     success: true,
     data: solution,
-    applied: shouldApply,
+    applied: false,
+    requiresDispatcherApproval: true,
     meta: {
       tenantId: orgId,
       solverEngine: solution.solver,
