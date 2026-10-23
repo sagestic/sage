@@ -27,23 +27,24 @@ test("expired credentials are rejected", () => {
 });
 
 test("development credential requires exact match and does not work in production", () => {
-  const originalKey = process.env.SAGE_DEV_API_KEY;
-  const originalEnv = process.env.NODE_ENV;
+  const env = process.env as Record<string, string | undefined>;
+  const originalKey = env.SAGE_DEV_API_KEY;
+  const originalEnv = env.NODE_ENV;
   const key = randomBytes(32).toString("hex");
   try {
-    process.env.NODE_ENV = "development";
-    process.env.SAGE_DEV_API_KEY = key;
+    env.NODE_ENV = "development";
+    env.SAGE_DEV_API_KEY = key;
     const result = sageRepo.authenticateApiKey(key);
     assert.equal(result.valid, true);
     assert.equal(result.organizationId, orgId);
     assert.deepEqual(result.scopes, ["orders:write"]);
     assert.equal(sageRepo.authenticateApiKey(key + "x").valid, false);
-    process.env.NODE_ENV = "production";
+    env.NODE_ENV = "production";
     assert.equal(sageRepo.authenticateApiKey(key).valid, false);
   } finally {
-    if (originalKey === undefined) delete process.env.SAGE_DEV_API_KEY;
-    else process.env.SAGE_DEV_API_KEY = originalKey;
-    if (originalEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = originalEnv;
+    if (originalKey === undefined) delete env.SAGE_DEV_API_KEY;
+    else env.SAGE_DEV_API_KEY = originalKey;
+    if (originalEnv === undefined) delete env.NODE_ENV;
+    else env.NODE_ENV = originalEnv;
   }
 });
