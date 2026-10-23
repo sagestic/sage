@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   let solution;
   try {
     solution = requireValidVrpSolution(problem, await solveVrpWithGoogleOrTools(problem));
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: "No safe optimization preview available." }, { status: 422 });
   }
 
