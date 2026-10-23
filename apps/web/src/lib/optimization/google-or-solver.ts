@@ -18,7 +18,11 @@ export async function solveVrpWithGoogleOrTools(
   }
 
   // Resolve path to vrp_solver.py inside packages/ai-engine
-  const solverScriptPath = path.resolve(process.cwd(), "packages/ai-engine/src/or-tools/vrp_solver.py");
+  const solverScriptPath = path.resolve(
+    process.cwd(),
+    process.cwd().endsWith(path.join("apps", "web")) ? "../.." : ".",
+    "packages/ai-engine/src/or-tools/vrp_solver.py",
+  );
 
   return new Promise<VrpSolution>((resolve, reject) => {
     try {
