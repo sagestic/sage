@@ -12,3 +12,4 @@ export * from "./or-tools/index";
 export * from "./vrp-validation";
 
 export * from "./recovery-governance";
+export * from "./recovery-road-evidence";
