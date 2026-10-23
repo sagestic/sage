@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireValidVrpSolution } from "@sage/ai-engine";
+import { requireValidVrpSolution, type VrpProblemRequest } from "@sage/ai-engine";
 import { authenticateApiRequest } from "../../../../../lib/api/auth";
 import { sageRepo } from "../../../../../lib/data/sage-repo";
 import { solveVrpWithGoogleOrTools } from "../../../../../lib/optimization/google-or-solver";
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Build problem definition
-  const problem = {
+  const problem: VrpProblemRequest = {
     depot: undefined,
     vehicles: availableRiders.map((r) => ({
       id: r.id,
