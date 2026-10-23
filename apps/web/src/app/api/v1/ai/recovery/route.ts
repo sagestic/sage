@@ -37,7 +37,11 @@ export async function POST(req: NextRequest) {
     } else {
       interpretation = await createGeminiIncidentInterpreter({ apiKey: apiKey! }).interpret(crypto.randomUUID(), description);
     }
-  } catch {
+  } catch (error) {
+    if (process.env.NODE_ENV === "development") {
+      // Do not log the incident description or API credentials.
+      console.error("[recovery] Gemini interpretation failed:", error instanceof Error ? error.message : "Unknown error");
+    }
     return NextResponse.json({ error: "Could not safely interpret incident; clarify the rider ID and incident type" }, { status: 422 });
   }
   const incident = interpretation.incident;
