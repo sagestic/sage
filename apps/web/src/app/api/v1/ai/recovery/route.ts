@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createGeminiIncidentInterpreter, requireValidVrpSolution, type VrpProblemRequest } from "@sage/ai-engine";
+import { createGeminiIncidentInterpreter, validateIncidentOutput, requireValidVrpSolution, type VrpProblemRequest } from "@sage/ai-engine";
 import { authenticateApiRequest } from "../../../../../lib/api/auth";
 import { sageRepo } from "../../../../../lib/data/sage-repo";
 import { solveVrpWithGoogleOrTools } from "../../../../../lib/optimization/google-or-solver";
@@ -20,11 +20,23 @@ export async function POST(req: NextRequest) {
   if (typeof description !== "string" || !description.trim() || description.length > 2000)
     return NextResponse.json({ error: "Provide an incident description (1–2000 characters)" }, { status: 400 });
 
+  // Explicit development-only simulation; request bodies cannot enable it.
+  const mockMode = process.env.NODE_ENV === "development" && process.env.SAGE_MOCK_GEMINI === "true";
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "Gemini is not configured" }, { status: 503 });
+  if (!mockMode && !apiKey) return NextResponse.json({ error: "Gemini is not configured" }, { status: 503 });
   let interpretation;
   try {
-    interpretation = await createGeminiIncidentInterpreter({ apiKey }).interpret(crypto.randomUUID(), description);
+    if (mockMode) {
+      if (!/\brdr_apex_1\b/i.test(description) || !/\b(broken down|breakdown)\b/i.test(description)) {
+        return NextResponse.json({ error: "Mock mode requires an explicit rdr_apex_1 breakdown report" }, { status: 422 });
+      }
+      interpretation = validateIncidentOutput(crypto.randomUUID(), {
+        kind: "breakdown", vehicleId: "rdr_apex_1", confidence: 1,
+        evidence: "Simulated fixture: explicitly reported rider breakdown",
+      });
+    } else {
+      interpretation = await createGeminiIncidentInterpreter({ apiKey: apiKey! }).interpret(crypto.randomUUID(), description);
+    }
   } catch {
     return NextResponse.json({ error: "Could not safely interpret incident; clarify the rider ID and incident type" }, { status: 422 });
   }
@@ -65,7 +77,7 @@ export async function POST(req: NextRequest) {
   try {
     const solution = requireValidVrpSolution(problem, await solveVrpWithGoogleOrTools(problem));
     return NextResponse.json({
-      success: true, interpretation,
+      success: true, interpretation, simulation: mockMode,
       affectedOrders: affected.map(o => ({ id: o.id, orderNumber: o.orderNumber, status: o.status })),
       recommendation: solution,
       explanation: `Rider ${brokenRider.name} was reported unavailable. Sage evaluated ${affected.length} active assigned deliveries against ${available.length} available replacement riders. Review the proposed routes and confirm the physical parcel handover before taking action. This preview has not changed any assignments.`,
