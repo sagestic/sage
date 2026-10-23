@@ -6,6 +6,9 @@
   "types": "./src/index.ts",
   "scripts": {
     "db:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/sage} prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "node --experimental-strip-types prisma/seed.ts",
+    "db:studio": "prisma studio",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },

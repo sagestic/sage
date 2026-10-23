@@ -11,6 +11,23 @@ if (( $# > 1 )); then
     exit 1
 fi
 
+if [[ -f .env ]]; then
+    _caller_ssh_key="${SAGE_SSH_KEY-}"
+    _caller_ssh_host="${SAGE_SSH_HOST-}"
+    _caller_tunnel_port="${DB_TUNNEL_PORT-}"
+    _caller_dev_container="${DEV_CONTAINER_ID-}"
+    _caller_prod_container="${PROD_CONTAINER_ID-}"
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+    [[ -n "$_caller_ssh_key" ]] && SAGE_SSH_KEY="$_caller_ssh_key"
+    [[ -n "$_caller_ssh_host" ]] && SAGE_SSH_HOST="$_caller_ssh_host"
+    [[ -n "$_caller_tunnel_port" ]] && DB_TUNNEL_PORT="$_caller_tunnel_port"
+    [[ -n "$_caller_dev_container" ]] && DEV_CONTAINER_ID="$_caller_dev_container"
+    [[ -n "$_caller_prod_container" ]] && PROD_CONTAINER_ID="$_caller_prod_container"
+fi
+
 environment="${1:-dev}"
 case "$environment" in
     dev)

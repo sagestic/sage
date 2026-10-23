@@ -17,7 +17,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { Badge, Button } from "@sage/ui";
+import {  Button } from "@sage/ui";
 import { DEFAULT_TENANTS } from "../../lib/tenant/types";
 
 interface DashboardSidebarProps {
@@ -50,7 +50,6 @@ export function DashboardSidebar({
       href: "/dashboard/operations",
       icon: Radio,
       badge: "LIVE",
-      badgeVariant: "destructive" as const,
     },
     {
       title: "Orders",
@@ -71,24 +70,21 @@ export function DashboardSidebar({
       title: "Integrations Hub",
       href: "/dashboard/integrations",
       icon: Layers,
-      badge: "5 Active",
     },
     {
       title: "Incidents",
       href: "/dashboard/incidents",
       icon: AlertTriangle,
       badge: openIncidentsCount > 0 ? `${openIncidentsCount}` : undefined,
-      badgeVariant: "destructive" as const,
     },
     {
       title: "AI Recommendations",
       href: "/dashboard/recommendations",
       icon: Sparkles,
       badge: pendingRecsCount > 0 ? `${pendingRecsCount}` : undefined,
-      badgeVariant: "secondary" as const,
     },
     {
-      title: "Settings & Access",
+      title: "Settings",
       href: "/dashboard/settings",
       icon: Settings,
     },
@@ -100,72 +96,57 @@ export function DashboardSidebar({
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-card">
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950">
       {/* Brand Header */}
-      <div className="flex h-16 items-center justify-between border-b border-border px-5">
-        <Link href="/" className="flex items-center space-x-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-black tracking-wider text-lg shadow-sm">
+      <div className="flex h-16 items-center justify-between px-5">
+        <Link href="/" className="flex items-center space-x-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold text-sm shadow-sm">
             S
           </div>
-          <div className="flex flex-col">
-            <span className="text-base font-bold tracking-tight text-foreground">
-              sage
-            </span>
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-              Control Centre
-            </span>
-          </div>
+          <span className="text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            sage
+          </span>
         </Link>
-        <Badge
-          variant="outline"
-          className="text-[10px] font-semibold border-emerald-500/30 text-emerald-600 bg-emerald-500/10"
-        >
-          v0.2.0
-        </Badge>
       </div>
 
       {/* Organization Switcher */}
-      <div className="relative p-3 border-b border-border/70 bg-muted/30">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 mb-1.5 flex items-center justify-between">
-          <span>Active Tenant</span>
-          <span className="text-[9px] text-emerald-600 font-bold">Isolated</span>
-        </div>
+      <div className="relative px-3 pb-4">
         <button
           type="button"
           onClick={() => setTenantDropdownOpen(!tenantDropdownOpen)}
-          className="flex w-full items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-left text-xs font-medium hover:bg-accent transition-colors shadow-xs"
+          className="flex w-full items-center justify-between rounded-lg border border-zinc-200/60 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 px-3 py-2 text-left text-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors shadow-sm"
         >
-          <div className="flex items-center space-x-2 truncate">
-            <span className="text-sm">{currentTenant.logo}</span>
-            <span className="truncate font-semibold text-foreground">
+          <div className="flex items-center space-x-2.5 truncate">
+            <span className="text-base leading-none">{currentTenant.logo}</span>
+            <span className="truncate font-medium text-zinc-900 dark:text-zinc-100">
               {currentTenant.name}
             </span>
           </div>
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-1" />
+          <ChevronDown className="h-4 w-4 text-zinc-500 shrink-0 ml-1" />
         </button>
 
         {tenantDropdownOpen && (
-          <div className="absolute left-3 right-3 top-full z-50 mt-1 rounded-lg border border-border bg-popover p-1 shadow-lg animate-in fade-in-50">
-            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground">
-              Switch Organization
+          <div className="absolute left-3 right-3 top-full z-50 mt-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-1 shadow-lg">
+            <div className="px-2 py-1.5 text-xs font-medium text-zinc-500">
+              Switch Workspace
             </div>
             {DEFAULT_TENANTS.map((tenant) => (
               <button
                 key={tenant.id}
                 type="button"
                 onClick={() => switchTenant(tenant.slug)}
-                className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-left transition-colors ${
+                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm text-left transition-colors ${
                   tenant.slug === currentTenantSlug
-                    ? "bg-accent font-semibold text-accent-foreground"
-                    : "hover:bg-muted text-muted-foreground"
+                    ? "bg-zinc-100 dark:bg-zinc-800 font-medium text-zinc-900 dark:text-zinc-100"
+                    : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-zinc-600 dark:text-zinc-400"
                 }`}
               >
-                <div className="flex items-center space-x-2">
-                  <span>{tenant.logo}</span>
+                <div className="flex items-center space-x-2.5">
+                  <span className="text-base leading-none">{tenant.logo}</span>
                   <span>{tenant.name}</span>
                 </div>
                 {tenant.slug === currentTenantSlug && (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                  <CheckCircle2 className="h-4 w-4 text-zinc-900 dark:text-zinc-100" />
                 )}
               </button>
             ))}
@@ -174,10 +155,7 @@ export function DashboardSidebar({
       </div>
 
       {/* Main Navigation */}
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-3 mb-2">
-          Operations
-        </div>
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
         {navItems.map((item) => {
           const isActive = item.exact
             ? pathname === item.href
@@ -188,33 +166,28 @@ export function DashboardSidebar({
             <Link
               key={item.href}
               href={item.href}
-              className={`group flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+              className={`group flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  ? "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-100"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-100"
               }`}
             >
               <div className="flex items-center space-x-3">
                 <Icon
-                  className={`h-4 w-4 transition-colors ${
-                    isActive
-                      ? "text-primary-foreground"
-                      : "text-muted-foreground group-hover:text-foreground"
+                  className={`h-4 w-4 ${
+                    isActive ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300"
                   }`}
                 />
                 <span>{item.title}</span>
               </div>
               {item.badge && (
-                <Badge
-                  variant={item.badgeVariant || (isActive ? "secondary" : "outline")}
-                  className={`text-[10px] py-0 px-1.5 font-bold ${
-                    isActive
-                      ? "bg-primary-foreground/20 text-primary-foreground border-transparent"
-                      : ""
-                  }`}
-                >
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  item.badge === "LIVE" 
+                    ? "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400"
+                    : "bg-zinc-200/50 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                }`}>
                   {item.badge}
-                </Badge>
+                </span>
               )}
             </Link>
           );
@@ -222,32 +195,20 @@ export function DashboardSidebar({
       </nav>
 
       {/* PWA / Rider Mode Quick Action */}
-      <div className="p-3 border-t border-border bg-muted/20">
-        <div className="rounded-xl border border-border bg-card p-3 shadow-xs space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-foreground flex items-center gap-1.5">
-              <Smartphone className="h-3.5 w-3.5 text-primary" />
-              Rider PWA Mode
-            </span>
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+      <div className="p-4 mt-auto">
+        <div className="rounded-xl border border-zinc-200/60 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 p-4 shadow-sm space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            <Smartphone className="h-4 w-4 text-zinc-500" />
+            Rider App
           </div>
-          <p className="text-[11px] text-muted-foreground leading-snug">
-            Open mobile app interface for drivers and field couriers.
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+            Open mobile app interface for couriers.
           </p>
           <Link href="/rider" className="block">
-            <Button variant="outline" size="sm" className="w-full text-xs h-8">
-              Launch Rider PWA
+            <Button variant="outline" size="sm" className="w-full h-8 text-xs border-zinc-200 dark:border-zinc-800 bg-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800">
+              Launch PWA
             </Button>
           </Link>
-        </div>
-
-        {/* Demo Data Banner */}
-        <div className="mt-3 flex items-center justify-between px-2 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Tenant Sandbox Ready
-          </span>
-          <span className="font-mono">REST/SSE</span>
         </div>
       </div>
     </aside>

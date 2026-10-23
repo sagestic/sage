@@ -10,7 +10,7 @@ import {
   Search,
   ShieldCheck,
 } from "lucide-react";
-import { Avatar, Badge, Button, Input } from "@sage/ui";
+import { Avatar, Button, Input } from "@sage/ui";
 import type { Role } from "@sage/site-schema";
 import type { IncidentItem } from "../../lib/data/sage-repo";
 import type { TenantUser } from "../../lib/tenant/types";
@@ -44,71 +44,68 @@ export function DashboardHeader({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-border bg-card/95 px-6 backdrop-blur-md">
-      {/* Search and Quick Filters */}
+    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 px-6 backdrop-blur-xl">
+      {/* Search */}
       <div className="flex items-center space-x-4 max-w-md w-full">
-        <div className="relative w-full">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <div className="relative w-full max-w-xs">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
           <Input
-            placeholder="Search orders, riders, incidents, addresses..."
-            className="pl-9 h-9 bg-background text-xs border-border/80 focus-visible:ring-1"
+            placeholder="Search orders, riders..."
+            className="pl-9 h-9 bg-zinc-50/50 dark:bg-zinc-900/50 text-sm border-zinc-200/60 dark:border-zinc-800 focus-visible:ring-1 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-300"
           />
         </div>
       </div>
 
       {/* Header Actions */}
-      <div className="flex items-center space-x-3">
-        {/* Real-time Status Pill */}
-        <div className="hidden md:flex items-center space-x-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Realtime Dispatch Synced</span>
+      <div className="flex items-center space-x-4">
+        {/* Real-time Status */}
+        <div className="hidden md:flex items-center space-x-2 px-3 py-1">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          </span>
+          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Live</span>
         </div>
 
-        {/* Refresh Sync Button */}
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 text-muted-foreground hover:text-foreground"
+          className="h-9 w-9 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           onClick={handleManualSync}
-          title="Refresh Operations Data"
         >
-          <RefreshCw
-            className={`h-4 w-4 ${isRefreshing ? "animate-spin text-primary" : ""}`}
-          />
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
         </Button>
 
-        {/* Notifications & Incident Drawer */}
+        {/* Notifications */}
         <div className="relative">
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 relative text-muted-foreground hover:text-foreground"
+            className="h-9 w-9 relative text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             onClick={() => setNotificationsOpen(!notificationsOpen)}
           >
             <Bell className="h-4 w-4" />
             {openIncidents.length > 0 && (
-              <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-              </span>
+              <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-rose-500 border border-white dark:border-zinc-950" />
             )}
           </Button>
 
           {notificationsOpen && (
-            <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-border bg-popover p-3 shadow-xl z-50">
-              <div className="flex items-center justify-between border-b border-border pb-2 mb-2">
-                <span className="text-xs font-bold text-foreground">
-                  Operational Alerts
+            <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2 shadow-lg z-50">
+              <div className="px-2 py-1.5 mb-1 flex items-center justify-between">
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Alerts
                 </span>
-                <Badge variant="destructive" className="text-[10px] py-0 px-1.5">
-                  {openIncidents.length} Active
-                </Badge>
+                {openIncidents.length > 0 && (
+                  <span className="bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    {openIncidents.length} New
+                  </span>
+                )}
               </div>
-
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-1 max-h-64 overflow-y-auto">
                 {openIncidents.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-muted-foreground">
-                    All operations running smoothly. No active alerts.
+                  <div className="p-4 text-center text-sm text-zinc-500">
+                    No active alerts.
                   </div>
                 ) : (
                   openIncidents.map((incident) => (
@@ -116,35 +113,22 @@ export function DashboardHeader({
                       key={incident.id}
                       href="/dashboard/incidents"
                       onClick={() => setNotificationsOpen(false)}
-                      className="block p-2 rounded-lg border border-border/60 hover:bg-muted/50 transition-colors"
+                      className="block p-3 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
                     >
-                      <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                        <span className="truncate text-foreground">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                           {incident.title}
                         </span>
-                        <Badge
-                          variant="destructive"
-                          className="text-[9px] uppercase px-1 py-0"
-                        >
+                        <span className="text-[10px] uppercase font-bold text-rose-600 dark:text-rose-400">
                           {incident.severity}
-                        </Badge>
+                        </span>
                       </div>
-                      <p className="text-[11px] text-muted-foreground line-clamp-2">
+                      <p className="text-xs text-zinc-500 line-clamp-2">
                         {incident.description}
                       </p>
                     </Link>
                   ))
                 )}
-              </div>
-
-              <div className="border-t border-border pt-2 mt-2 text-center">
-                <Link
-                  href="/dashboard/incidents"
-                  onClick={() => setNotificationsOpen(false)}
-                  className="text-xs text-primary font-medium hover:underline"
-                >
-                  View All Incidents →
-                </Link>
               </div>
             </div>
           )}
@@ -155,75 +139,53 @@ export function DashboardHeader({
           <button
             type="button"
             onClick={() => setRoleDropdownOpen(!roleDropdownOpen)}
-            className="flex items-center space-x-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
+            className="flex items-center space-x-2 rounded-full border border-zinc-200/60 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3 py-1.5 text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
-            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span className="capitalize font-semibold text-foreground">
+            <ShieldCheck className="h-3.5 w-3.5 text-zinc-500" />
+            <span className="capitalize font-semibold text-zinc-900 dark:text-zinc-100">
               {currentUser.role.replace("_", " ").toLowerCase()}
             </span>
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />
           </button>
 
           {roleDropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-border bg-popover p-1.5 shadow-xl z-50 animate-in fade-in-50">
-              <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground">
-                Simulate User Role (RBAC)
+            <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-1.5 shadow-lg z-50">
+              <div className="px-2 py-1.5 text-xs font-medium text-zinc-500">
+                Simulate Role
               </div>
               {[
-                {
-                  role: "ORG_ADMIN" as Role,
-                  label: "Org Administrator",
-                  desc: "Full access, credentials, settings",
-                },
-                {
-                  role: "DISPATCHER" as Role,
-                  label: "Dispatcher / Ops Manager",
-                  desc: "Assign orders, fleet control, incidents",
-                },
-                {
-                  role: "RIDER" as Role,
-                  label: "Field Courier / Rider",
-                  desc: "Assigned orders, status reporting",
-                },
+                { role: "ORG_ADMIN" as Role, label: "Admin" },
+                { role: "DISPATCHER" as Role, label: "Dispatcher" },
+                { role: "RIDER" as Role, label: "Rider" },
               ].map((item) => (
                 <button
                   key={item.role}
                   type="button"
                   onClick={() => switchRole(item.role)}
-                  className={`flex w-full flex-col items-start rounded-lg p-2 text-left transition-colors ${
+                  className={`flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm text-left transition-colors ${
                     currentUser.role === item.role
-                      ? "bg-accent text-accent-foreground font-semibold"
-                      : "hover:bg-muted text-muted-foreground"
+                      ? "bg-zinc-100 dark:bg-zinc-800 font-medium text-zinc-900 dark:text-zinc-100"
+                      : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-zinc-600 dark:text-zinc-400"
                   }`}
                 >
-                  <div className="flex items-center justify-between w-full text-xs">
-                    <span className="font-medium text-foreground">
-                      {item.label}
-                    </span>
-                    {currentUser.role === item.role && (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                    )}
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">
-                    {item.desc}
-                  </span>
+                  <span>{item.label}</span>
+                  {currentUser.role === item.role && (
+                    <CheckCircle2 className="h-4 w-4 text-zinc-900 dark:text-zinc-100" />
+                  )}
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* User Avatar */}
-        <div className="flex items-center space-x-2 pl-2 border-l border-border">
-          <Avatar name={currentUser.name} className="h-8 w-8 text-xs font-bold" />
-          <div className="hidden lg:flex flex-col text-left">
-            <span className="text-xs font-semibold leading-none text-foreground">
+        {/* User Profile */}
+        <div className="flex items-center space-x-3 pl-4 border-l border-zinc-200 dark:border-zinc-800">
+          <div className="hidden lg:flex flex-col items-end">
+            <span className="text-sm font-medium leading-none text-zinc-900 dark:text-zinc-100">
               {currentUser.name}
             </span>
-            <span className="text-[10px] text-muted-foreground mt-0.5">
-              {currentUser.email}
-            </span>
           </div>
+          <Avatar name={currentUser.name} className="h-8 w-8 text-xs font-semibold bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" />
         </div>
       </div>
     </header>

@@ -27,10 +27,11 @@
   --input: oklch(92.2% 0.004 286.3);
   --ring: oklch(70.5% 0.015 286);
 
-  --radius: 0.5rem;
+  --radius: 0rem;
 }
 
-.dark {
+@media (prefers-color-scheme: dark) {
+  :root {
   --background: oklch(14.5% 0.005 285.8);
   --foreground: oklch(98.5% 0 0);
 
@@ -58,4 +59,6 @@
   --border: oklch(26.9% 0.005 285.8);
   --input: oklch(26.9% 0.005 285.8);
   --ring: oklch(44.2% 0.017 285.8);
+  }
+
 }
