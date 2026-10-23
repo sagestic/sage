@@ -161,7 +161,6 @@ export default function OrdersPage() {
   const onCreateOrder = (data: CreateOrderInput) => {
     const created = sageRepo.createOrder(orgId, data);
     setCreateOrderOpen(false);
-    setIsInterstateChecked(false);
     orderForm.reset({
       orderNumber: "ORD-9427",
       source: "MANUAL",

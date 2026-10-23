@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
 import test from "node:test";
 import { sageRepo } from "./sage-repo";
 
@@ -30,7 +29,7 @@ test("development credential requires exact match and does not work in productio
   const env = process.env as Record<string, string | undefined>;
   const originalKey = env.SAGE_DEV_API_KEY;
   const originalEnv = env.NODE_ENV;
-  const key = randomBytes(32).toString("hex");
+  const key = Math.random().toString(36).substring(2);
   try {
     env.NODE_ENV = "development";
     env.SAGE_DEV_API_KEY = key;

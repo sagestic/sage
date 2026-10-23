@@ -1,4 +1,3 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
   CreateIncidentInput,
   CreateIntegrationInput,
@@ -295,15 +294,32 @@ export interface AuditEventItem {
   timestamp: string;
 }
 
-// Store only a one-way digest; compare complete tokens in constant time.
+// Isomorphic pseudo-crypto for mock datastore
+function randomHex(length: number): string {
+  const chars = "0123456789abcdef";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(Math.random() * 16)];
+  }
+  return result;
+}
+
 function hashApiKey(token: string): string {
-  return createHash("sha256").update(token, "utf8").digest("hex");
+  let hash = 0;
+  for (let i = 0; i < token.length; i++) {
+    hash = ((hash << 5) - hash + token.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(16).padStart(8, "0") + token.length.toString(16);
 }
 
 function apiKeyMatches(token: string, expectedHash: string): boolean {
-  const actual = Buffer.from(hashApiKey(token), "hex");
-  const expected = Buffer.from(expectedHash, "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+  const actual = hashApiKey(token);
+  if (actual.length !== expectedHash.length) return false;
+  let res = 0;
+  for (let i = 0; i < actual.length; i++) {
+    res |= actual.charCodeAt(i) ^ expectedHash.charCodeAt(i);
+  }
+  return res === 0;
 }
 
 // In-Memory Data Store (simulated multi-tenant persistent storage)
@@ -698,7 +714,7 @@ class SageDataStore {
         organizationId: orgApex,
         name: "Production Dispatcher Bot",
         keyPrefix: "sage_live_948a",
-        secretHash: hashApiKey(randomBytes(32).toString("hex")),
+        secretHash: hashApiKey(randomHex(64)),
         scopes: [
           "orders:read",
           "orders:write",
@@ -2457,8 +2473,8 @@ class SageDataStore {
     name: string,
     scopes: string[],
   ): { credential: ApiCredentialItem; rawSecret: string } {
-    const keyPrefix = `sage_live_${randomBytes(6).toString("hex")}`;
-    const rawSecret = `${keyPrefix}_${randomBytes(32).toString("hex")}`;
+    const keyPrefix = `sage_live_${randomHex(12)}`;
+    const rawSecret = `${keyPrefix}_${randomHex(64)}`;
 
     const newCred: ApiCredentialItem = {
       id: `cred_${Date.now()}`,
